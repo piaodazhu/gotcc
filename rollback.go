@@ -1,2 +1,2 @@
-package main
+package gooc
 

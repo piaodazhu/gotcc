@@ -1,67 +1,42 @@
-package main
+package gooc
 
-type DependencyExpression func(dependency map[uint32]bool) bool
 
-func NoDependency(dependency map[uint32]bool) bool {
+type DependencyExpression func() bool
+
+func DefaultTrueExpr() bool {
 	return true
 }
 
-func NewDependencyExpr(e *Executor, dependency map[uint32]bool) DependencyExpression {
-	return func (dependency map[uint32]bool) bool {
-		return dependency[e.Id]
+func DefaultFalseExpr() bool {
+	return false
+}
+
+func newDependencyExpr(valMap map[uint32]bool, key uint32) DependencyExpression {
+	return func() bool {
+		return valMap[key]
 	}
 }
 
-func not(Expr DependencyExpression) DependencyExpression {
-	return func(dependency map[uint32]bool) bool {
-		return !Expr(dependency)
+func MakeNotExpr(Expr DependencyExpression) DependencyExpression {
+	return func() bool {
+		return !Expr()
 	}
 }
 
-func and(Expr1 DependencyExpression, Expr2 DependencyExpression) DependencyExpression {
-	return func(dependency map[uint32]bool) bool {
-		return Expr1(dependency) && Expr2(dependency)
+func MakeAndExpr(Expr1 DependencyExpression, Expr2 DependencyExpression) DependencyExpression {
+	return func() bool {
+		return Expr1() && Expr2()
 	}
 }
 
-func or(Expr1 DependencyExpression, Expr2 DependencyExpression) DependencyExpression {
-	return func(dependency map[uint32]bool) bool {
-		return Expr1(dependency) || Expr2(dependency)
+func MakeOrExpr(Expr1 DependencyExpression, Expr2 DependencyExpression) DependencyExpression {
+	return func() bool {
+		return Expr1() || Expr2()
 	}
 }
 
-func (e *Executor) MakeNotDependency(d *Executor) DependencyExpression {
-	if _, exists := e.Dependency[d.Id]; !exists {
-		e.Dependency[d.Id] = false
-		// need buffered chan?
-		e.MessageBuffer = make(chan Message, cap(e.MessageBuffer) + 1)
-		d.Subscribers = append(d.Subscribers, e.MessageBuffer)
+func MakeXorExpr(Expr1 DependencyExpression, Expr2 DependencyExpression) DependencyExpression {
+	return func() bool {
+		return (Expr1() && !Expr2()) || (!Expr1() && Expr2())
 	}
-	return not(NewDependencyExpr(d, e.Dependency))
-}
-
-func (e *Executor) MakeAndDependency(d *Executor, Expr DependencyExpression) DependencyExpression {
-	if _, exists := e.Dependency[d.Id]; !exists {
-		e.Dependency[d.Id] = false
-		// need buffered chan?
-		e.MessageBuffer = make(chan Message, cap(e.MessageBuffer) + 1)
-		d.Subscribers = append(d.Subscribers, e.MessageBuffer)
-	}
-	return and(NewDependencyExpr(d, e.Dependency), Expr)
-}
-
-func (e *Executor) MakeOrDependency(d *Executor, Expr DependencyExpression) DependencyExpression {
-	if _, exists := e.Dependency[d.Id]; !exists {
-		e.Dependency[d.Id] = false
-		// need buffered chan?
-		e.MessageBuffer = make(chan Message, cap(e.MessageBuffer) + 1)
-		d.Subscribers = append(d.Subscribers, e.MessageBuffer)
-	}
-	return or(NewDependencyExpr(d, e.Dependency), Expr)
-}
-
-func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
-	// delete(e.Manager.StartSet, e.Id)
-	e.DependencyExpr = Expr 
-	return e
 }
