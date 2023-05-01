@@ -12,11 +12,12 @@ type Executor struct {
 	DependencyExpr DependencyExpression
 
 	MessageBuffer chan Message
-	Subscribers   []chan Message
+	Subscribers   []*chan Message
 
-	BindArgs     interface{}
-	Task         func(args map[string]interface{}) (interface{}, error)
-	RollbackTask func(args map[string]interface{}) (interface{}, error)
+	BindArgs interface{}
+	Task     func(args map[string]interface{}) (interface{}, error)
+	Undo     func(args map[string]interface{}) error
+	UndoSkipError bool
 
 	Manager *Manager
 }
@@ -30,11 +31,11 @@ func newExecutor(name string, f func(args map[string]interface{}) (interface{}, 
 		DependencyExpr: DefaultTrueExpr,
 
 		MessageBuffer: make(chan Message),
-		Subscribers:   []chan Message{},
+		Subscribers:   []*chan Message{},
 
-		BindArgs:     args,
-		Task:         f,
-		RollbackTask: f,
+		BindArgs: args,
+		Task:     f,
+		Undo:     EmptyUndoFunc,
 
 		Manager: nil,
 	}
@@ -45,7 +46,7 @@ func (e *Executor) NewDependencyExpr(d *Executor) DependencyExpression {
 		e.Dependency[d.Id] = false
 		// need buffered chan?
 		e.MessageBuffer = make(chan Message, cap(e.MessageBuffer)+1)
-		d.Subscribers = append(d.Subscribers, e.MessageBuffer)
+		d.Subscribers = append(d.Subscribers, &e.MessageBuffer)
 	}
 	return newDependencyExpr(e.Dependency, d.Id)
 }
@@ -58,4 +59,10 @@ func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
 
 func (e *Executor) CalcDependency() bool {
 	return e.DependencyExpr()
+}
+
+func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, SkipError bool) *Executor {
+	e.Undo = undo 
+	e.UndoSkipError = SkipError
+	return e
 }

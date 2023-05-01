@@ -15,7 +15,9 @@ type Manager struct {
 
 	Termination *Executor
 
-	ErrorMsgs []ErrorMessage
+	ErrorMsgs ErrorList
+
+	UndoStack UndoStack
 }
 
 func NewOCManager() *Manager {
@@ -25,7 +27,8 @@ func NewOCManager() *Manager {
 		CancelCtx:   ctx,
 		CancelFunc:  cf,
 		Termination: newExecutor("TERMINATION", nil, nil),
-		ErrorMsgs:   []ErrorMessage{},
+		ErrorMsgs:   ErrorList{},
+		UndoStack:   UndoStack{},
 	}
 	m.Termination.Manager = m
 	return m
@@ -34,7 +37,6 @@ func NewOCManager() *Manager {
 func (m *Manager) AddTask(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
 	e := newExecutor(name, f, args)
 	e.Manager = m
-
 	m.Executors = append(m.Executors, e)
 	return e
 }
@@ -47,7 +49,7 @@ func (m *Manager) NewTerminationExpr(d *Executor) DependencyExpression {
 	if _, exists := m.Termination.Dependency[d.Id]; !exists {
 		m.Termination.Dependency[d.Id] = false
 		m.Termination.MessageBuffer = make(chan Message, cap(m.Termination.MessageBuffer)+1)
-		d.Subscribers = append(d.Subscribers, m.Termination.MessageBuffer)
+		d.Subscribers = append(d.Subscribers, &m.Termination.MessageBuffer)
 	}
 	return newDependencyExpr(m.Termination.Dependency, d.Id)
 }
@@ -57,19 +59,17 @@ type ErrNoTermination struct{}
 func (ErrNoTermination) Error() string { return "Error: No termination condition has been set!" }
 
 type ErrAborted struct {
-	Reasons []ErrorMessage
+	TaskErrors *ErrorList
+	UndoErrors *ErrorList
 }
 
 func (m ErrAborted) Error() string {
-	var res strings.Builder
-	res.WriteString("Error: Tasks aborted! Reasons: ")
-	for i := range m.Reasons {
-		res.WriteString(m.Reasons[i].SenderName)
-		res.WriteString(": ")
-		res.WriteString(m.Reasons[i].Value.Error())
-		res.WriteString("; ")
-	}
-	return res.String()
+	var sb strings.Builder
+	sb.WriteString("\n[x] TaskErrors:\n")
+	sb.WriteString(m.TaskErrors.String())
+	sb.WriteString("\n[-] UndoErrors:\n")
+	sb.WriteString(m.UndoErrors.String())
+	return sb.String()
 }
 
 func (m *Manager) RunTask() (map[string]interface{}, error) {
@@ -100,6 +100,8 @@ func (m *Manager) RunTask() (map[string]interface{}, error) {
 			if err != nil {
 				fmt.Println(err)
 
+				m.ErrorMsgs.Append(NewErrorMessage(e.Name, err))
+
 				// abort all task...
 				m.CancelFunc()
 				return
@@ -107,25 +109,26 @@ func (m *Manager) RunTask() (map[string]interface{}, error) {
 				outMsg.Value = result
 
 				// add to finished stack...
+				m.UndoStack.Push(NewUndoFunc(e.Name, e.UndoSkipError, e.Undo, args))
 			}
 
 			for _, subscriber := range e.Subscribers {
 				select {
 				case <-m.CancelCtx.Done():
-				case subscriber <- outMsg:
+					return
+				case *subscriber <- outMsg:
 				}
 			}
 		}()
 	}
-	// wait something to stop
 
+	// wait termination
 	t := m.Termination
 	Results := map[string]interface{}{}
 	Aborted := false
 
 waitLoop:
 	for !t.CalcDependency() {
-		// wait until dep ok
 		select {
 		case <-m.CancelCtx.Done():
 			// aborted
@@ -142,10 +145,14 @@ waitLoop:
 		wg.Wait()
 		return Results, nil
 	} else {
-		// some thing wrong
-		// rollback
+		// aborted because of some error
 		wg.Wait()
-		returnErr := ErrAborted{m.ErrorMsgs}
+		returnErr := ErrAborted{
+			TaskErrors: &m.ErrorMsgs,
+		}
+
+		// do the rollback
+		returnErr.UndoErrors = m.UndoStack.UndoAll()
 
 		return nil, returnErr
 	}

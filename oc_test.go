@@ -4,6 +4,10 @@ import (
 	"testing"
 )
 
+type ErrForTest struct{}
+
+func (ErrForTest) Error() string { return "ErrForTest" }
+
 func hello(args map[string]interface{}) (interface{}, error) {
 	globalTest.Log("hello")
 	for k, v := range args {
@@ -17,6 +21,8 @@ func world(args map[string]interface{}) (interface{}, error) {
 	for k, v := range args {
 		globalTest.Logf("arg %s=%d\n", k, v.(int))
 	}
+	// time.Sleep(1 * time.Second)
+	// return 0, ErrForTest{}
 	return 2, nil
 }
 
@@ -25,6 +31,8 @@ func helloworld(args map[string]interface{}) (interface{}, error) {
 	for k, v := range args {
 		globalTest.Logf("arg %s=%d\n", k, v.(int))
 	}
+	// time.Sleep(1 * time.Second)
+	// return 0, ErrForTest{}
 	return 3, nil
 }
 
@@ -59,17 +67,21 @@ func TestManager(t *testing.T) {
 	manager := NewOCManager()
 
 	hello := manager.AddTask("hello", hello, 0)
-	world := manager.AddTask("world", world, 0)
-	helloworld := manager.AddTask("helloworld", helloworld, 0)
-	foo := manager.AddTask("foo", foo, 0)
-	bar := manager.AddTask("bar", bar, 0)
-	foobar := manager.AddTask("foobar", foobar, 0)
+	world := manager.AddTask("world", world, 1)
+	helloworld := manager.AddTask("helloworld", helloworld, 2)
+	foo := manager.AddTask("foo", foo, 3)
+	bar := manager.AddTask("bar", bar, 4)
+	foobar := manager.AddTask("foobar", foobar, 5)
 
 	helloworld.SetDependency(MakeAndExpr(helloworld.NewDependencyExpr(hello), helloworld.NewDependencyExpr(world)))
 
 	foobar.SetDependency(MakeOrExpr(foobar.NewDependencyExpr(foo), foobar.NewDependencyExpr(bar)))
 
 	manager.SetTermination(MakeAndExpr(manager.NewTerminationExpr(foobar), manager.NewTerminationExpr(helloworld)))
-	
-	manager.RunTask()
+
+	ret, err := manager.RunTask()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log(ret)
 }
