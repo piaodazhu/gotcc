@@ -1,4 +1,4 @@
-package gooc
+package gotcc
 
 import (
 	"testing"
@@ -62,24 +62,24 @@ func foobar(args map[string]interface{}) (interface{}, error) {
 
 var globalTest *testing.T
 
-func TestManager(t *testing.T) {
+func TestTCController(t *testing.T) {
 	globalTest = t
-	manager := NewOCManager()
+	controller := NewTCController()
 
-	hello := manager.AddTask("hello", hello, 0)
-	world := manager.AddTask("world", world, 1)
-	helloworld := manager.AddTask("helloworld", helloworld, 2)
-	foo := manager.AddTask("foo", foo, 3)
-	bar := manager.AddTask("bar", bar, 4)
-	foobar := manager.AddTask("foobar", foobar, 5)
+	hello := controller.AddTask("hello", hello, 0)
+	world := controller.AddTask("world", world, 1)
+	helloworld := controller.AddTask("helloworld", helloworld, 2)
+	foo := controller.AddTask("foo", foo, 3)
+	bar := controller.AddTask("bar", bar, 4)
+	foobar := controller.AddTask("foobar", foobar, 5)
 
 	helloworld.SetDependency(MakeAndExpr(helloworld.NewDependencyExpr(hello), helloworld.NewDependencyExpr(world)))
 
 	foobar.SetDependency(MakeOrExpr(foobar.NewDependencyExpr(foo), foobar.NewDependencyExpr(bar)))
 
-	manager.SetTermination(MakeAndExpr(manager.NewTerminationExpr(foobar), manager.NewTerminationExpr(helloworld)))
+	controller.SetTermination(MakeAndExpr(controller.NewTerminationExpr(foobar), controller.NewTerminationExpr(helloworld)))
 
-	ret, err := manager.RunTask()
+	ret, err := controller.RunTask()
 	if err != nil {
 		t.Fatal(err)
 	}

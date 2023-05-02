@@ -1,4 +1,4 @@
-package gooc
+package gotcc
 
 import (
 	"github.com/google/uuid"
@@ -14,12 +14,12 @@ type Executor struct {
 	MessageBuffer chan Message
 	Subscribers   []*chan Message
 
-	BindArgs interface{}
-	Task     func(args map[string]interface{}) (interface{}, error)
-	Undo     func(args map[string]interface{}) error
+	BindArgs      interface{}
+	Task          func(args map[string]interface{}) (interface{}, error)
+	Undo          func(args map[string]interface{}) error
 	UndoSkipError bool
 
-	Manager *Manager
+	TCController *TCController
 }
 
 func newExecutor(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
@@ -37,7 +37,7 @@ func newExecutor(name string, f func(args map[string]interface{}) (interface{}, 
 		Task:     f,
 		Undo:     EmptyUndoFunc,
 
-		Manager: nil,
+		TCController: nil,
 	}
 }
 
@@ -52,7 +52,7 @@ func (e *Executor) NewDependencyExpr(d *Executor) DependencyExpression {
 }
 
 func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
-	// delete(e.Manager.StartSet, e.Id)
+	// delete(e.TCController.StartSet, e.Id)
 	e.DependencyExpr = Expr
 	return e
 }
@@ -62,7 +62,7 @@ func (e *Executor) CalcDependency() bool {
 }
 
 func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, SkipError bool) *Executor {
-	e.Undo = undo 
+	e.Undo = undo
 	e.UndoSkipError = SkipError
 	return e
 }

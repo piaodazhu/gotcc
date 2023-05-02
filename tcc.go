@@ -1,4 +1,4 @@
-package gooc
+package gotcc
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-type Manager struct {
+type TCController struct {
 	Executors []*Executor
 
 	CancelCtx  context.Context
@@ -20,9 +20,9 @@ type Manager struct {
 	UndoStack UndoStack
 }
 
-func NewOCManager() *Manager {
+func NewTCController() *TCController {
 	ctx, cf := context.WithCancel(context.Background())
-	m := &Manager{
+	m := &TCController{
 		Executors:   []*Executor{},
 		CancelCtx:   ctx,
 		CancelFunc:  cf,
@@ -30,22 +30,22 @@ func NewOCManager() *Manager {
 		ErrorMsgs:   ErrorList{},
 		UndoStack:   UndoStack{},
 	}
-	m.Termination.Manager = m
+	m.Termination.TCController = m
 	return m
 }
 
-func (m *Manager) AddTask(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
+func (m *TCController) AddTask(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
 	e := newExecutor(name, f, args)
-	e.Manager = m
+	e.TCController = m
 	m.Executors = append(m.Executors, e)
 	return e
 }
 
-func (m *Manager) SetTermination(Expr DependencyExpression) {
+func (m *TCController) SetTermination(Expr DependencyExpression) {
 	m.Termination.SetDependency(Expr)
 }
 
-func (m *Manager) NewTerminationExpr(d *Executor) DependencyExpression {
+func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	if _, exists := m.Termination.Dependency[d.Id]; !exists {
 		m.Termination.Dependency[d.Id] = false
 		m.Termination.MessageBuffer = make(chan Message, cap(m.Termination.MessageBuffer)+1)
@@ -72,7 +72,7 @@ func (m ErrAborted) Error() string {
 	return sb.String()
 }
 
-func (m *Manager) RunTask() (map[string]interface{}, error) {
+func (m *TCController) RunTask() (map[string]interface{}, error) {
 	if len(m.Termination.Dependency) == 0 {
 		return nil, ErrNoTermination{}
 	}

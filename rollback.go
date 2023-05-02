@@ -1,4 +1,4 @@
-package gooc
+package gotcc
 
 import "sync"
 
