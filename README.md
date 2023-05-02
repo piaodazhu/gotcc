@@ -48,16 +48,21 @@ func main() {
 	taskB := controller.AddTask("taskB", ExampleFunc1, "BindArg-B").SetUndoFunc(ExampleUndo, true)
 	//   TaskC: bind arguments with ExampleFunc2
 	taskC := controller.AddTask("taskC", ExampleFunc2, "BindArg-C")
+	
+	//   TaskD: bind arguments with ExampleFunc2
+	taskD := controller.AddTask("taskD", ExampleFunc2, "BindArg-D")
 
 	// 3. Define dependencies
 	//   B depend on A
-	taskB.SetDependency(taskC.NewDependencyExpr(taskA))
-	//   C depend on A and B
-	taskC.SetDependency(gotcc.MakeAndExpr(taskC.NewDependencyExpr(taskA), taskC.NewDependencyExpr(taskB)))
+	taskB.SetDependency(taskB.NewDependencyExpr(taskA))
+	//   C depend on A
+	taskC.SetDependency(taskC.NewDependencyExpr(taskA))
+	//   D depend on B and C
+	taskD.SetDependency(gotcc.MakeAndExpr(taskD.NewDependencyExpr(taskB), taskD.NewDependencyExpr(taskC)))
 
 	// 4. Define termination (Important)
-	//   set TaskC's finish as termination
-	controller.SetTermination(controller.NewTerminationExpr(taskC))
+	//   set TaskD's finish as termination
+	controller.SetTermination(controller.NewTerminationExpr(taskD))
 	
 	// 5. Run the tasks
 	result, err := controller.RunTasks()
@@ -66,11 +71,11 @@ func main() {
 		// get undoErrors: err.(ErrAborted).UndoErrors
 	}
 
-	// 6. Will Print "BindArg-C"
-	fmt.Println(result["taskC"].(string))
+	// 6. Will Print "BindArg-D"
+	fmt.Println(result["taskD"].(string))
 }
 ```
-Tasks will run concurrently, but taskB will not start until taskA completes, and taskC will not start until both taskA and taskB complete. But if taskC failed (return err!=nil), `ExampleUndo("BindArg-B")` will be executed.
+Tasks will run concurrently, but taskB and taskC will not start until taskA completes, and taskD will not start until both taskB and taskC complete. But if taskD failed (return err!=nil), `ExampleUndo("BindArg-B")` will be executed.
 
 More detailed usage information can be found in test files, you can refer to `example_test.go` for a more complex dependency topology, `dependency_test.go` for the advanced usage of dependency logic expressions, and `tcc_test.go` for tasks rollback and error message collection.
 
