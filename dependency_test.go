@@ -1,26 +1,16 @@
 package gotcc
 
 import (
-	"fmt"
 	"testing"
 )
 
-func PrintTask(args map[string]interface{}) (interface{}, error) {
-	for name := range args {
-		fmt.Println("args: ", name)
-	}
-	str := args["BIND"].(string)
-	fmt.Println(str)
-	return nil, nil
-}
-
 func TestDependency(t *testing.T) {
-	A := newExecutor("A", PrintTask, "A")
-	B := newExecutor("B", PrintTask, "B")
-	C := newExecutor("C", PrintTask, "C")
-	D := newExecutor("D", PrintTask, "D")
-	E := newExecutor("E", PrintTask, "E")
-	F := newExecutor("F", PrintTask, "F")
+	A := newExecutor("A", nil, "A")
+	B := newExecutor("B", nil, "B")
+	C := newExecutor("C", nil, "C")
+	D := newExecutor("D", nil, "D")
+	E := newExecutor("E", nil, "E")
+	F := newExecutor("F", nil, "F")
 
 	// C <- A && B
 	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)))
@@ -45,13 +35,16 @@ func TestDependency(t *testing.T) {
 	A.SetDependency(DefaultFalseExpr)
 	B.SetDependency(DefaultFalseExpr)
 
-	C.Dependency[A.Id] = A.CalcDependency()
-	C.Dependency[B.Id] = B.CalcDependency()
-	D.Dependency[A.Id] = A.CalcDependency()
-	D.Dependency[B.Id] = B.CalcDependency()
-	E.Dependency[D.Id] = D.CalcDependency()
-	F.Dependency[B.Id] = B.CalcDependency()
-	F.Dependency[D.Id] = D.CalcDependency()
+	C.MarkDependency(A.Id, A.CalcDependency())
+	C.MarkDependency(B.Id, B.CalcDependency())
+
+	D.MarkDependency(A.Id, A.CalcDependency())
+	D.MarkDependency(B.Id, B.CalcDependency())
+
+	E.MarkDependency(D.Id, D.CalcDependency())
+
+	F.MarkDependency(B.Id, B.CalcDependency())
+	F.MarkDependency(D.Id, D.CalcDependency())
 
 	if A.CalcDependency() != false || B.CalcDependency() != false || C.CalcDependency() != false || D.CalcDependency() != false || E.CalcDependency() != true || F.CalcDependency() != false {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
@@ -61,13 +54,16 @@ func TestDependency(t *testing.T) {
 	A.SetDependency(DefaultTrueExpr)
 	B.SetDependency(DefaultFalseExpr)
 
-	C.Dependency[A.Id] = A.CalcDependency()
-	C.Dependency[B.Id] = B.CalcDependency()
-	D.Dependency[A.Id] = A.CalcDependency()
-	D.Dependency[B.Id] = B.CalcDependency()
-	E.Dependency[D.Id] = D.CalcDependency()
-	F.Dependency[B.Id] = B.CalcDependency()
-	F.Dependency[D.Id] = D.CalcDependency()
+	C.MarkDependency(A.Id, A.CalcDependency())
+	C.MarkDependency(B.Id, B.CalcDependency())
+
+	D.MarkDependency(A.Id, A.CalcDependency())
+	D.MarkDependency(B.Id, B.CalcDependency())
+
+	E.MarkDependency(D.Id, D.CalcDependency())
+
+	F.MarkDependency(B.Id, B.CalcDependency())
+	F.MarkDependency(D.Id, D.CalcDependency())
 
 	if A.CalcDependency() != true || B.CalcDependency() != false || C.CalcDependency() != false || D.CalcDependency() != true || E.CalcDependency() != false || F.CalcDependency() != true {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
@@ -77,13 +73,16 @@ func TestDependency(t *testing.T) {
 	A.SetDependency(DefaultFalseExpr)
 	B.SetDependency(DefaultTrueExpr)
 
-	C.Dependency[A.Id] = A.CalcDependency()
-	C.Dependency[B.Id] = B.CalcDependency()
-	D.Dependency[A.Id] = A.CalcDependency()
-	D.Dependency[B.Id] = B.CalcDependency()
-	E.Dependency[D.Id] = D.CalcDependency()
-	F.Dependency[B.Id] = B.CalcDependency()
-	F.Dependency[D.Id] = D.CalcDependency()
+	C.MarkDependency(A.Id, A.CalcDependency())
+	C.MarkDependency(B.Id, B.CalcDependency())
+
+	D.MarkDependency(A.Id, A.CalcDependency())
+	D.MarkDependency(B.Id, B.CalcDependency())
+
+	E.MarkDependency(D.Id, D.CalcDependency())
+
+	F.MarkDependency(B.Id, B.CalcDependency())
+	F.MarkDependency(D.Id, D.CalcDependency())
 
 	if A.CalcDependency() != false || B.CalcDependency() != true || C.CalcDependency() != false || D.CalcDependency() != true || E.CalcDependency() != false || F.CalcDependency() != false {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
@@ -93,13 +92,16 @@ func TestDependency(t *testing.T) {
 	A.SetDependency(DefaultTrueExpr)
 	B.SetDependency(DefaultTrueExpr)
 
-	C.Dependency[A.Id] = A.CalcDependency()
-	C.Dependency[B.Id] = B.CalcDependency()
-	D.Dependency[A.Id] = A.CalcDependency()
-	D.Dependency[B.Id] = B.CalcDependency()
-	E.Dependency[D.Id] = D.CalcDependency()
-	F.Dependency[B.Id] = B.CalcDependency()
-	F.Dependency[D.Id] = D.CalcDependency()
+	C.MarkDependency(A.Id, A.CalcDependency())
+	C.MarkDependency(B.Id, B.CalcDependency())
+
+	D.MarkDependency(A.Id, A.CalcDependency())
+	D.MarkDependency(B.Id, B.CalcDependency())
+
+	E.MarkDependency(D.Id, D.CalcDependency())
+
+	F.MarkDependency(B.Id, B.CalcDependency())
+	F.MarkDependency(D.Id, D.CalcDependency())
 
 	if A.CalcDependency() != true || B.CalcDependency() != true || C.CalcDependency() != true || D.CalcDependency() != true || E.CalcDependency() != false || F.CalcDependency() != false {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())

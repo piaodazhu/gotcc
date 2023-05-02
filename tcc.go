@@ -8,50 +8,47 @@ import (
 )
 
 type TCController struct {
-	Executors []*Executor
+	executors []*Executor
 
-	CancelCtx  context.Context
-	CancelFunc context.CancelFunc
+	cancelCtx  context.Context
+	cancelFunc context.CancelFunc
 
-	Termination *Executor
+	termination *Executor
 
-	ErrorMsgs ErrorList
+	errorMsgs ErrorList
 
-	UndoStack UndoStack
+	undoStack UndoStack
 }
 
 func NewTCController() *TCController {
 	ctx, cf := context.WithCancel(context.Background())
-	m := &TCController{
-		Executors:   []*Executor{},
-		CancelCtx:   ctx,
-		CancelFunc:  cf,
-		Termination: newExecutor("TERMINATION", nil, nil),
-		ErrorMsgs:   ErrorList{},
-		UndoStack:   UndoStack{},
+	return &TCController{
+		executors:   []*Executor{},
+		cancelCtx:   ctx,
+		cancelFunc:  cf,
+		termination: newExecutor("TERMINATION", nil, nil),
+		errorMsgs:   ErrorList{},
+		undoStack:   UndoStack{},
 	}
-	m.Termination.TCController = m
-	return m
 }
 
 func (m *TCController) AddTask(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
 	e := newExecutor(name, f, args)
-	e.TCController = m
-	m.Executors = append(m.Executors, e)
+	m.executors = append(m.executors, e)
 	return e
 }
 
 func (m *TCController) SetTermination(Expr DependencyExpression) {
-	m.Termination.SetDependency(Expr)
+	m.termination.SetDependency(Expr)
 }
 
 func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
-	if _, exists := m.Termination.Dependency[d.Id]; !exists {
-		m.Termination.Dependency[d.Id] = false
-		m.Termination.MessageBuffer = make(chan Message, cap(m.Termination.MessageBuffer)+1)
-		d.Subscribers = append(d.Subscribers, &m.Termination.MessageBuffer)
+	if _, exists := m.termination.dependency[d.Id]; !exists {
+		m.termination.dependency[d.Id] = false
+		m.termination.messageBuffer = make(chan Message, cap(m.termination.messageBuffer)+1)
+		d.subscribers = append(d.subscribers, &m.termination.messageBuffer)
 	}
-	return newDependencyExpr(m.Termination.Dependency, d.Id)
+	return newDependencyExpr(m.termination.dependency, d.Id)
 }
 
 type ErrNoTermination struct{}
@@ -73,13 +70,13 @@ func (m ErrAborted) Error() string {
 }
 
 func (m *TCController) RunTask() (map[string]interface{}, error) {
-	if len(m.Termination.Dependency) == 0 {
+	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
 	}
 	wg := sync.WaitGroup{}
-	wg.Add(len(m.Executors))
-	for i := range m.Executors {
-		e := m.Executors[i]
+	wg.Add(len(m.executors))
+	for i := range m.executors {
+		e := m.executors[i]
 		go func() {
 			defer wg.Done()
 			args := map[string]interface{}{"BIND": e.BindArgs}
@@ -87,10 +84,10 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 			for !e.CalcDependency() {
 				// wait until dep ok
 				select {
-				case <-m.CancelCtx.Done():
+				case <-m.cancelCtx.Done():
 					return
-				case msg := <-e.MessageBuffer:
-					e.Dependency[msg.Sender] = true
+				case msg := <-e.messageBuffer:
+					e.MarkDependency(msg.Sender, true)
 					args[msg.SenderName] = msg.Value
 				}
 			}
@@ -100,21 +97,21 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 			if err != nil {
 				fmt.Println(err)
 
-				m.ErrorMsgs.Append(NewErrorMessage(e.Name, err))
+				m.errorMsgs.Append(NewErrorMessage(e.Name, err))
 
 				// abort all task...
-				m.CancelFunc()
+				m.cancelFunc()
 				return
 			} else {
 				outMsg.Value = result
 
 				// add to finished stack...
-				m.UndoStack.Push(NewUndoFunc(e.Name, e.UndoSkipError, e.Undo, args))
+				m.undoStack.Push(NewUndoFunc(e.Name, e.UndoSkipError, e.Undo, args))
 			}
 
-			for _, subscriber := range e.Subscribers {
+			for _, subscriber := range e.subscribers {
 				select {
-				case <-m.CancelCtx.Done():
+				case <-m.cancelCtx.Done():
 					return
 				case *subscriber <- outMsg:
 				}
@@ -123,36 +120,36 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 	}
 
 	// wait termination
-	t := m.Termination
+	t := m.termination
 	Results := map[string]interface{}{}
 	Aborted := false
 
 waitLoop:
 	for !t.CalcDependency() {
 		select {
-		case <-m.CancelCtx.Done():
+		case <-m.cancelCtx.Done():
 			// aborted
 			Aborted = true
 			break waitLoop
-		case msg := <-t.MessageBuffer:
-			t.Dependency[msg.Sender] = true
+		case msg := <-t.messageBuffer:
+			t.MarkDependency(msg.Sender, true)
 			Results[msg.SenderName] = msg.Value
 		}
 	}
 	if !Aborted {
 		// all done!
-		m.CancelFunc()
+		m.cancelFunc()
 		wg.Wait()
 		return Results, nil
 	} else {
 		// aborted because of some error
 		wg.Wait()
 		returnErr := ErrAborted{
-			TaskErrors: &m.ErrorMsgs,
+			TaskErrors: &m.errorMsgs,
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.UndoStack.UndoAll()
+		returnErr.UndoErrors = m.undoStack.UndoAll()
 
 		return nil, returnErr
 	}

@@ -8,18 +8,16 @@ type Executor struct {
 	Id   uint32
 	Name string
 
-	Dependency     map[uint32]bool
-	DependencyExpr DependencyExpression
-
-	MessageBuffer chan Message
-	Subscribers   []*chan Message
-
 	BindArgs      interface{}
 	Task          func(args map[string]interface{}) (interface{}, error)
 	Undo          func(args map[string]interface{}) error
 	UndoSkipError bool
 
-	TCController *TCController
+	dependency     map[uint32]bool
+	dependencyExpr DependencyExpression
+
+	messageBuffer chan Message
+	subscribers   []*chan Message
 }
 
 func newExecutor(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
@@ -27,38 +25,38 @@ func newExecutor(name string, f func(args map[string]interface{}) (interface{}, 
 		Id:   uuid.New().ID(),
 		Name: name,
 
-		Dependency:     map[uint32]bool{},
-		DependencyExpr: DefaultTrueExpr,
+		dependency:     map[uint32]bool{},
+		dependencyExpr: DefaultTrueExpr,
 
-		MessageBuffer: make(chan Message),
-		Subscribers:   []*chan Message{},
+		messageBuffer: make(chan Message),
+		subscribers:   []*chan Message{},
 
 		BindArgs: args,
 		Task:     f,
 		Undo:     EmptyUndoFunc,
-
-		TCController: nil,
 	}
 }
 
 func (e *Executor) NewDependencyExpr(d *Executor) DependencyExpression {
-	if _, exists := e.Dependency[d.Id]; !exists {
-		e.Dependency[d.Id] = false
-		// need buffered chan?
-		e.MessageBuffer = make(chan Message, cap(e.MessageBuffer)+1)
-		d.Subscribers = append(d.Subscribers, &e.MessageBuffer)
+	if _, exists := e.dependency[d.Id]; !exists {
+		e.dependency[d.Id] = false
+		e.messageBuffer = make(chan Message, cap(e.messageBuffer)+1)
+		d.subscribers = append(d.subscribers, &e.messageBuffer)
 	}
-	return newDependencyExpr(e.Dependency, d.Id)
+	return newDependencyExpr(e.dependency, d.Id)
 }
 
 func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
-	// delete(e.TCController.StartSet, e.Id)
-	e.DependencyExpr = Expr
+	e.dependencyExpr = Expr
 	return e
 }
 
+func (e *Executor) MarkDependency(id uint32, finished bool) {
+	e.dependency[id] = finished
+}
+
 func (e *Executor) CalcDependency() bool {
-	return e.DependencyExpr()
+	return e.dependencyExpr()
 }
 
 func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, SkipError bool) *Executor {
