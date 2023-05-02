@@ -46,6 +46,10 @@ func (e *Executor) NewDependencyExpr(d *Executor) DependencyExpression {
 	return newDependencyExpr(e.dependency, d.Id)
 }
 
+func (e *Executor) DependencyExpr() DependencyExpression {
+	return e.dependencyExpr
+}
+
 func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
 	e.dependencyExpr = Expr
 	return e
@@ -53,10 +57,6 @@ func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
 
 func (e *Executor) MarkDependency(id uint32, finished bool) {
 	e.dependency[id] = finished
-}
-
-func (e *Executor) CalcDependency() bool {
-	return e.dependencyExpr()
 }
 
 func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, SkipError bool) *Executor {

@@ -2,7 +2,6 @@ package gotcc
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 )
@@ -51,6 +50,10 @@ func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	return newDependencyExpr(m.termination.dependency, d.Id)
 }
 
+func (m *TCController) TerminationExpr() DependencyExpression {
+	return m.termination.dependencyExpr
+}
+
 type ErrNoTermination struct{}
 
 func (ErrNoTermination) Error() string { return "Error: No termination condition has been set!" }
@@ -79,9 +82,9 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 		e := m.executors[i]
 		go func() {
 			defer wg.Done()
-			args := map[string]interface{}{"BIND": e.BindArgs}
+			args := map[string]interface{}{"BIND": e.BindArgs, "CANCEL": m.cancelCtx}
 
-			for !e.CalcDependency() {
+			for !e.dependencyExpr() {
 				// wait until dep ok
 				select {
 				case <-m.cancelCtx.Done():
@@ -95,8 +98,6 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 			outMsg := Message{Sender: e.Id, SenderName: e.Name}
 			result, err := e.Task(args)
 			if err != nil {
-				fmt.Println(err)
-
 				m.errorMsgs.Append(NewErrorMessage(e.Name, err))
 
 				// abort all task...
@@ -125,7 +126,7 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 	Aborted := false
 
 waitLoop:
-	for !t.CalcDependency() {
+	for !t.dependencyExpr() {
 		select {
 		case <-m.cancelCtx.Done():
 			// aborted
