@@ -1,4 +1,6 @@
+[![Go Reference](https://pkg.go.dev/badge/pkg.go.dev/github.com/piaodazhu/gotcc.svg)](https://pkg.go.dev/pkg.go.dev/github.com/piaodazhu/gotcc)
 [![Go Report Card](https://goreportcard.com/badge/github.com/piaodazhu/gotcc)](https://goreportcard.com/report/github.com/piaodazhu/gotcc)
+[![codecov](https://codecov.io/gh/piaodazhu/gotcc/branch/master/graph/badge.svg?token=KMOWEKDPN5)](https://codecov.io/gh/piaodazhu/gotcc)
 
 # gotcc
 

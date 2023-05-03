@@ -48,7 +48,7 @@ func (u *UndoStack) Pop() *UndoFunc {
 	return uf
 }
 
-// Unsafe
+
 func (u *UndoStack) UndoAll() *ErrorList {
 	errors := &ErrorList{}
 	for i := len(u.Items) - 1; i >= 0; i-- {
