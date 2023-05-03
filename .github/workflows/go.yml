@@ -31,4 +31,4 @@ jobs:
     - name: Install cloc
       run: sudo apt install cloc
     - name: Generate report
-      run: cloc .
+      run: cloc . --include-lang="Go"
