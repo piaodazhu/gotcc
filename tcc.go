@@ -50,7 +50,6 @@ func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	return newDependencyExpr(m.termination.dependency, d.Id)
 }
 
-
 type ErrNoTermination struct{}
 
 func (ErrNoTermination) Error() string { return "Error: No termination condition has been set!" }
