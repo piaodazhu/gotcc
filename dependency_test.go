@@ -82,7 +82,7 @@ func TestDependency(t *testing.T) {
 	}
 
 	// 1 1   1  1  0  0
-	if !checkResult(true, true, true, true, false, true) {
+	if !checkResult(true, true, true, true, false, false) {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
 	}
 }
