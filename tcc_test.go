@@ -17,6 +17,30 @@ func TaskDefault(args map[string]interface{}) (interface{}, error) {
 	return sum, nil
 }
 
+func TestNoTermination(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+	E := controller.AddTask("E", TaskDefault, 5)
+	F := controller.AddTask("F", TaskDefault, 6)
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B))) // 3 + 1 + 2 = 6
+	D.SetDependency(D.NewDependencyExpr(C))                                      // 4 + 6 = 10
+	E.SetDependency(MakeAndExpr(E.NewDependencyExpr(B), E.NewDependencyExpr(C))) // 5 + 2 + 6 = 13
+	F.SetDependency(MakeAndExpr(F.NewDependencyExpr(D), F.NewDependencyExpr(E))) // 6 + 10 + 13 = 29
+
+	// controller.SetTermination(controller.NewTerminationExpr(F))
+
+	_, err := controller.RunTask()
+	if err, ok := err.(ErrNoTermination); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+}
+
+
 func TestRunTask(t *testing.T) {
 	controller := NewTCController()
 	A := controller.AddTask("A", TaskDefault, 1)

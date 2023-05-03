@@ -27,25 +27,10 @@ func NewUndoFunc(name string, skipError bool, undo func(args map[string]interfac
 	}
 }
 
-func (u *UndoStack) Empty() bool {
-	u.Lock.Lock()
-	isEmpty := len(u.Items) == 0
-	u.Lock.Unlock()
-	return isEmpty
-}
-
 func (u *UndoStack) Push(uf *UndoFunc) {
 	u.Lock.Lock()
 	u.Items = append(u.Items, uf)
 	u.Lock.Unlock()
-}
-
-func (u *UndoStack) Pop() *UndoFunc {
-	u.Lock.Lock()
-	uf := u.Items[len(u.Items)-1]
-	u.Items = u.Items[:len(u.Items)-1]
-	u.Lock.Unlock()
-	return uf
 }
 
 

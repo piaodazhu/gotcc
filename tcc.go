@@ -50,9 +50,6 @@ func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	return newDependencyExpr(m.termination.dependency, d.Id)
 }
 
-func (m *TCController) TerminationExpr() DependencyExpression {
-	return m.termination.dependencyExpr
-}
 
 type ErrNoTermination struct{}
 
@@ -111,11 +108,7 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 			}
 
 			for _, subscriber := range e.subscribers {
-				select {
-				case <-m.cancelCtx.Done():
-					return
-				case *subscriber <- outMsg:
-				}
+				*subscriber <- outMsg
 			}
 		}()
 	}
