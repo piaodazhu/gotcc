@@ -40,7 +40,6 @@ func TestNoTermination(t *testing.T) {
 	t.Log(err.Error())
 }
 
-
 func TestRunTask(t *testing.T) {
 	controller := NewTCController()
 	A := controller.AddTask("A", TaskDefault, 1)
