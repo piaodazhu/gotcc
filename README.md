@@ -1,4 +1,4 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/piaodazhu/gotcc)](https://goreportcard.com/report/github.com/piaodazhu/gotcc)
+
 
 # gotcc
 
