@@ -191,7 +191,7 @@ func TestCollectRollbackErrorsNoSkip(t *testing.T) {
 	for i := 0; i < 99; i++ {
 		arg := argsForTest{
 			id:               i,
-			taskShouldFailed: i == 96, // task 96 will fail
+			taskShouldFailed: i == 96,                    // task 96 will fail
 			undoShouldFailed: i == 5 || i == 2 || i == 1, // undo 1 2 5 will fail
 			sleepTime:        i,
 		}

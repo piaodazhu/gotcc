@@ -30,80 +30,61 @@ func TestDependency(t *testing.T) {
 	// 1 0   0  1  0  1
 	// 0 1   0  1  0  0
 	// 1 1   1  1  0  0
+	checkResult := func(valA bool, valB bool, valC bool, valD bool, valE bool, valF bool) bool {
+		if valA {
+			A.SetDependency(DefaultTrueExpr)
+		} else {
+			A.SetDependency(DefaultFalseExpr)
+		}
+		if valB {
+			B.SetDependency(DefaultTrueExpr)
+		} else {
+			B.SetDependency(DefaultFalseExpr)
+		}
+
+		C.MarkDependency(A.Id, A.DependencyExpr()())
+		C.MarkDependency(B.Id, B.DependencyExpr()())
+
+		D.MarkDependency(A.Id, A.DependencyExpr()())
+		D.MarkDependency(B.Id, B.DependencyExpr()())
+
+		E.MarkDependency(D.Id, D.DependencyExpr()())
+
+		F.MarkDependency(B.Id, B.DependencyExpr()())
+		F.MarkDependency(D.Id, D.DependencyExpr()())
+
+		if valC != C.DependencyExpr()() {
+			return false
+		}
+		if valD != D.DependencyExpr()() {
+			return false
+		}
+		if valE != E.DependencyExpr()() {
+			return false
+		}
+		if valF != F.DependencyExpr()() {
+			return false
+		}
+		return true
+	}
 
 	// 0 0   0  0  1  0
-	A.SetDependency(DefaultFalseExpr)
-	B.SetDependency(DefaultFalseExpr)
-
-	C.MarkDependency(A.Id, A.DependencyExpr()())
-	C.MarkDependency(B.Id, B.DependencyExpr()())
-
-	D.MarkDependency(A.Id, A.DependencyExpr()())
-	D.MarkDependency(B.Id, B.DependencyExpr()())
-
-	E.MarkDependency(D.Id, D.DependencyExpr()())
-
-	F.MarkDependency(B.Id, B.DependencyExpr()())
-	F.MarkDependency(D.Id, D.DependencyExpr()())
-
-	if A.DependencyExpr()() != false || B.DependencyExpr()() != false || C.DependencyExpr()() != false || D.DependencyExpr()() != false || E.DependencyExpr()() != true || F.DependencyExpr()() != false {
+	if !checkResult(false, false, false, false, true, false) {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
 	}
 
 	// 1 0   0  1  0  1
-	A.SetDependency(DefaultTrueExpr)
-	B.SetDependency(DefaultFalseExpr)
-
-	C.MarkDependency(A.Id, A.DependencyExpr()())
-	C.MarkDependency(B.Id, B.DependencyExpr()())
-
-	D.MarkDependency(A.Id, A.DependencyExpr()())
-	D.MarkDependency(B.Id, B.DependencyExpr()())
-
-	E.MarkDependency(D.Id, D.DependencyExpr()())
-
-	F.MarkDependency(B.Id, B.DependencyExpr()())
-	F.MarkDependency(D.Id, D.DependencyExpr()())
-
-	if A.DependencyExpr()() != true || B.DependencyExpr()() != false || C.DependencyExpr()() != false || D.DependencyExpr()() != true || E.DependencyExpr()() != false || F.DependencyExpr()() != true {
+	if !checkResult(true, false, false, true, false, true) {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
 	}
 
 	// 0 1   0  1  0  0
-	A.SetDependency(DefaultFalseExpr)
-	B.SetDependency(DefaultTrueExpr)
-
-	C.MarkDependency(A.Id, A.DependencyExpr()())
-	C.MarkDependency(B.Id, B.DependencyExpr()())
-
-	D.MarkDependency(A.Id, A.DependencyExpr()())
-	D.MarkDependency(B.Id, B.DependencyExpr()())
-
-	E.MarkDependency(D.Id, D.DependencyExpr()())
-
-	F.MarkDependency(B.Id, B.DependencyExpr()())
-	F.MarkDependency(D.Id, D.DependencyExpr()())
-
-	if A.DependencyExpr()() != false || B.DependencyExpr()() != true || C.DependencyExpr()() != false || D.DependencyExpr()() != true || E.DependencyExpr()() != false || F.DependencyExpr()() != false {
+	if !checkResult(false, true, false, true, false, false) {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
 	}
 
 	// 1 1   1  1  0  0
-	A.SetDependency(DefaultTrueExpr)
-	B.SetDependency(DefaultTrueExpr)
-
-	C.MarkDependency(A.Id, A.DependencyExpr()())
-	C.MarkDependency(B.Id, B.DependencyExpr()())
-
-	D.MarkDependency(A.Id, A.DependencyExpr()())
-	D.MarkDependency(B.Id, B.DependencyExpr()())
-
-	E.MarkDependency(D.Id, D.DependencyExpr()())
-
-	F.MarkDependency(B.Id, B.DependencyExpr()())
-	F.MarkDependency(D.Id, D.DependencyExpr()())
-
-	if A.DependencyExpr()() != true || B.DependencyExpr()() != true || C.DependencyExpr()() != true || D.DependencyExpr()() != true || E.DependencyExpr()() != false || F.DependencyExpr()() != false {
+	if !checkResult(true, true, true, true, false, false) {
 		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
 	}
 }
