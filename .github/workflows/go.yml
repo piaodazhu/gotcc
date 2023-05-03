@@ -24,3 +24,11 @@ jobs:
       run: go test ./... -v
     - name: PrintMsg
       run: echo "--GOTCC--"
+  codereport:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install cloc
+      run: sudo apt install cloc
+    - name: Generate report
+      run: cloc .
