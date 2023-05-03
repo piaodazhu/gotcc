@@ -1,3 +1,5 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/piaodazhu/gotcc)](https://goreportcard.com/report/github.com/piaodazhu/gotcc)
+
 # gotcc
 
 🤖 `gotcc` is a Golang package for Task Concurrency Control. It allows you to define tasks, their dependencies, and the controller will run the tasks concurrently while respecting the dependencies.
