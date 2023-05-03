@@ -1,8 +1,6 @@
 package gotcc
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestDependency(t *testing.T) {
 	A := newExecutor("A", nil, "A")
