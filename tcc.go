@@ -7,7 +7,7 @@ import (
 )
 
 type TCController struct {
-	executors []*Executor
+	executors map[uint32]*Executor
 
 	cancelCtx  context.Context
 	cancelFunc context.CancelFunc
@@ -22,7 +22,7 @@ type TCController struct {
 func NewTCController() *TCController {
 	ctx, cf := context.WithCancel(context.Background())
 	return &TCController{
-		executors:   []*Executor{},
+		executors:   map[uint32]*Executor{},
 		cancelCtx:   ctx,
 		cancelFunc:  cf,
 		termination: newExecutor("TERMINATION", nil, nil),
@@ -33,7 +33,7 @@ func NewTCController() *TCController {
 
 func (m *TCController) AddTask(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
 	e := newExecutor(name, f, args)
-	m.executors = append(m.executors, e)
+	m.executors[e.Id] = e
 	return e
 }
 
@@ -48,6 +48,39 @@ func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 		d.subscribers = append(d.subscribers, &m.termination.messageBuffer)
 	}
 	return newDependencyExpr(m.termination.dependency, d.Id)
+}
+
+func (m *TCController) loopDependency() bool {
+	const (
+		white = 0
+		gray  = 1
+		black = 2
+	)
+	color := map[uint32]int{}
+	var dfs func(curr uint32) bool
+	dfs = func(curr uint32) bool {
+		color[curr] = gray
+		for neighbor := range m.executors[curr].dependency {
+			switch color[neighbor] {
+			case white:
+				if dfs(neighbor) {
+					return true
+				}
+			case gray:
+				return true
+			case black:
+			}
+		}
+		color[curr] = black
+		return false
+	}
+
+	for taskid := range m.executors {
+		if dfs(taskid) {
+			return true
+		}
+	}
+	return false
 }
 
 type ErrNoTermination struct{}
@@ -81,14 +114,25 @@ func (e ErrCancelled) Error() string {
 	return "Error: Task is canncelled due to other errors."
 }
 
+type ErrLoopDependency struct {
+	State State
+}
+
+func (e ErrLoopDependency) Error() string {
+	return "Error: Tasks has loop dependency."
+}
+
 func (m *TCController) RunTask() (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
 	}
+	if m.loopDependency() {
+		return nil, ErrLoopDependency{}
+	}
 	wg := sync.WaitGroup{}
 	wg.Add(len(m.executors))
-	for i := range m.executors {
-		e := m.executors[i]
+	for taskid := range m.executors {
+		e := m.executors[taskid]
 		go func() {
 			defer wg.Done()
 			args := map[string]interface{}{"BIND": e.BindArgs, "CANCEL": m.cancelCtx}

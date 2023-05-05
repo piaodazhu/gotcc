@@ -41,6 +41,102 @@ func TestNoTermination(t *testing.T) {
 	t.Log(err.Error())
 }
 
+func TestLoopDependencyCond1(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+
+	// C <- A and B   A <- C
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)))
+
+	// make loop dependency
+	A.SetDependency(A.NewDependencyExpr(C))
+
+	controller.SetTermination(controller.NewTerminationExpr(C))
+
+	_, err := controller.RunTask()
+	if _, ok := err.(ErrLoopDependency); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+}
+
+func TestLoopDependencyCond2(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+
+	// C <- A  A <- B  B <- C
+
+	// make loop dependency
+	C.SetDependency(C.NewDependencyExpr(A))
+	A.SetDependency(A.NewDependencyExpr(B))
+	B.SetDependency(B.NewDependencyExpr(C))
+
+	controller.SetTermination(controller.NewTerminationExpr(C))
+
+	_, err := controller.RunTask()
+	if _, ok := err.(ErrLoopDependency); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+}
+
+func TestLoopDependencyCond3(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+
+	// B <- A  D <- A  C <- A and B and D
+
+	C.SetDependency(MakeAndExpr(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)), C.NewDependencyExpr(D)))
+
+	B.SetDependency(B.NewDependencyExpr(A))
+	D.SetDependency(D.NewDependencyExpr(A))
+
+	controller.SetTermination(controller.NewTerminationExpr(C))
+
+	res, err := controller.RunTask()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum, ok := res["C"]; !ok {
+		t.Fatal(err)
+	} else if sum != 12 {
+		t.Fatal("Sum Error", sum)
+	}
+}
+
+func TestLoopDependencyCond4(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+
+	// B <- A  D <- A  C <- B and D  A <- C
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(B), C.NewDependencyExpr(D)))
+	B.SetDependency(B.NewDependencyExpr(A))
+	D.SetDependency(D.NewDependencyExpr(A))
+
+	// make loop dependency
+	A.SetDependency(A.NewDependencyExpr(C))
+
+	controller.SetTermination(controller.NewTerminationExpr(C))
+
+	_, err := controller.RunTask()
+	if _, ok := err.(ErrLoopDependency); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+}
+
 func TestRunTask(t *testing.T) {
 	controller := NewTCController()
 	A := controller.AddTask("A", TaskDefault, 1)
