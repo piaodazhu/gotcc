@@ -14,6 +14,7 @@ type TCController struct {
 
 	termination *Executor
 
+	cancelled CancelList
 	errorMsgs ErrorList
 	undoStack UndoStack
 }
@@ -51,20 +52,33 @@ func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 
 type ErrNoTermination struct{}
 
-func (ErrNoTermination) Error() string { return "Error: No termination condition has been set!" }
+func (ErrNoTermination) Error() string {
+	return "Error: No termination condition has been set!"
+}
 
 type ErrAborted struct {
 	TaskErrors *ErrorList
 	UndoErrors *ErrorList
+	Cancelled  *CancelList
 }
 
-func (m ErrAborted) Error() string {
+func (e ErrAborted) Error() string {
 	var sb strings.Builder
 	sb.WriteString("\n[x] TaskErrors:\n")
-	sb.WriteString(m.TaskErrors.String())
+	sb.WriteString(e.TaskErrors.String())
 	sb.WriteString("\n[-] UndoErrors:\n")
-	sb.WriteString(m.UndoErrors.String())
+	sb.WriteString(e.UndoErrors.String())
+	sb.WriteString("\n[/] Cancelled:\n")
+	sb.WriteString(e.Cancelled.String())
 	return sb.String()
+}
+
+type ErrCancelled struct {
+	State State
+}
+
+func (e ErrCancelled) Error() string {
+	return "Error: Task is canncelled due to other errors."
 }
 
 func (m *TCController) RunTask() (map[string]interface{}, error) {
@@ -93,8 +107,11 @@ func (m *TCController) RunTask() (map[string]interface{}, error) {
 			outMsg := Message{Sender: e.Id, SenderName: e.Name}
 			result, err := e.Task(args)
 			if err != nil {
-				m.errorMsgs.Append(NewErrorMessage(e.Name, err))
-
+				if ec, isCancelled := err.(ErrCancelled); isCancelled {
+					m.cancelled.Append(NewStateMessage(e.Name, ec.State))
+				} else {
+					m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+				}
 				// abort all task...
 				m.cancelFunc()
 				return
@@ -138,10 +155,11 @@ waitLoop:
 		wg.Wait()
 		returnErr := ErrAborted{
 			TaskErrors: &m.errorMsgs,
+			Cancelled:  &m.cancelled,
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs)
+		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled)
 
 		return nil, returnErr
 	}

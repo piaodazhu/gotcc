@@ -107,6 +107,7 @@ func (args map[string]interface{}) error
 There are some built-in keys when running the undo function:
 - `TASKERR`: the value type is `[]*gotcc.ErrorMessage`, recording the errors of tasks execution.
 - `UNDOERR`: the value type is `[]*gotcc.ErrorMessage`, recording the previous errors of undo execution.
+- `CANCELLED`: the value type is `[]*gotcc.StateMessage`, recording the state of canncelld task. (For example, what process in that task has been done before cancelled.)
 
 The undo functions will be run in the reverse order of the task function completion. And the second arguments of `SetUndoFunc` means whether to skip this error if the undo function errors out.
 

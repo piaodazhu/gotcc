@@ -35,11 +35,12 @@ func (u *UndoStack) Push(uf *UndoFunc) {
 	u.Lock.Unlock()
 }
 
-func (u *UndoStack) UndoAll(taskErrors *ErrorList) *ErrorList {
+func (u *UndoStack) UndoAll(taskErrors *ErrorList, cancelled *CancelList) *ErrorList {
 	undoErrors := &ErrorList{}
 	for i := len(u.Items) - 1; i >= 0; i-- {
 		u.Items[i].Args["TASKERR"] = taskErrors.Items
 		u.Items[i].Args["UNDOERR"] = undoErrors.Items
+		u.Items[i].Args["CANCELLED"] = cancelled.Items
 
 		err := u.Items[i].Func(u.Items[i].Args)
 		if err != nil {
