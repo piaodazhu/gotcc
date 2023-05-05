@@ -15,7 +15,6 @@ type TCController struct {
 	termination *Executor
 
 	errorMsgs ErrorList
-
 	undoStack UndoStack
 }
 
@@ -142,7 +141,7 @@ waitLoop:
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.undoStack.UndoAll()
+		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs)
 
 		return nil, returnErr
 	}

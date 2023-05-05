@@ -8,9 +8,12 @@ type UndoStack struct {
 }
 
 type UndoFunc struct {
-	Name      string
+	Name string
+
 	SkipError bool
-	Func      func() error
+
+	Args map[string]interface{}
+	Func func(map[string]interface{}) error
 }
 
 func EmptyUndoFunc(args map[string]interface{}) error {
@@ -21,9 +24,8 @@ func NewUndoFunc(name string, skipError bool, undo func(args map[string]interfac
 	return &UndoFunc{
 		Name:      name,
 		SkipError: skipError,
-		Func: func() error {
-			return undo(args)
-		},
+		Args:      args,
+		Func:      undo,
 	}
 }
 
@@ -33,16 +35,19 @@ func (u *UndoStack) Push(uf *UndoFunc) {
 	u.Lock.Unlock()
 }
 
-func (u *UndoStack) UndoAll() *ErrorList {
-	errors := &ErrorList{}
+func (u *UndoStack) UndoAll(taskErrors *ErrorList) *ErrorList {
+	undoErrors := &ErrorList{}
 	for i := len(u.Items) - 1; i >= 0; i-- {
-		err := u.Items[i].Func()
+		u.Items[i].Args["TASKERR"] = taskErrors.Items
+		u.Items[i].Args["UNDOERR"] = undoErrors.Items
+
+		err := u.Items[i].Func(u.Items[i].Args)
 		if err != nil {
-			errors.Append(NewErrorMessage(u.Items[i].Name, err))
+			undoErrors.Append(NewErrorMessage(u.Items[i].Name, err))
 			if !u.Items[i].SkipError {
-				return errors
+				return undoErrors
 			}
 		}
 	}
-	return errors
+	return undoErrors
 }
