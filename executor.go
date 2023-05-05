@@ -64,3 +64,11 @@ func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, Ski
 	e.UndoSkipError = SkipError
 	return e
 }
+
+type ErrCancelled struct {
+	State State
+}
+
+func (e ErrCancelled) Error() string {
+	return "Error: Task is canncelled due to other errors."
+}

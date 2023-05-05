@@ -2,7 +2,6 @@ package gotcc
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -379,9 +378,8 @@ func TaskMayFailedOrCancelled(args map[string]interface{}) (interface{}, error) 
 			return "DONE", nil
 		}
 	case <-args["CANCEL"].(context.Context).Done():
-		err := ErrCancelled{TaskState{"ID-" + strconv.Itoa(args["BIND"].(argsForTest).id)}}
-		fmt.Println(err)
-		return nil, err
+		err := ErrCancelled{}
+		return nil, ErrCancelled{TaskState{"ID-" + strconv.Itoa(args["BIND"].(argsForTest).id) + err.Error()}}
 	}
 }
 

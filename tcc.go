@@ -85,45 +85,6 @@ func (m *TCController) loopDependency() bool {
 	return false
 }
 
-type ErrNoTermination struct{}
-
-func (ErrNoTermination) Error() string {
-	return "Error: No termination condition has been set!"
-}
-
-type ErrAborted struct {
-	TaskErrors *ErrorList
-	UndoErrors *ErrorList
-	Cancelled  *CancelList
-}
-
-func (e ErrAborted) Error() string {
-	var sb strings.Builder
-	sb.WriteString("\n[x] TaskErrors:\n")
-	sb.WriteString(e.TaskErrors.String())
-	sb.WriteString("\n[-] UndoErrors:\n")
-	sb.WriteString(e.UndoErrors.String())
-	sb.WriteString("\n[/] Cancelled:\n")
-	sb.WriteString(e.Cancelled.String())
-	return sb.String()
-}
-
-type ErrCancelled struct {
-	State State
-}
-
-func (e ErrCancelled) Error() string {
-	return "Error: Task is canncelled due to other errors."
-}
-
-type ErrLoopDependency struct {
-	State State
-}
-
-func (e ErrLoopDependency) Error() string {
-	return "Error: Tasks has loop dependency."
-}
-
 func (m *TCController) Run() (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
@@ -203,12 +164,13 @@ waitLoop:
 		// aborted because of some error
 		wg.Wait()
 		returnErr := ErrAborted{
-			TaskErrors: &m.errorMsgs,
-			Cancelled:  &m.cancelled,
+			TaskErrors: m.errorMsgs.Items,
+			Cancelled:  m.cancelled.Items,
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled)
+		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled).Items
+		fmt.Println(returnErr.Error())
 		return nil, returnErr
 	}
 }
@@ -245,7 +207,7 @@ func (m *TCController) String() string {
 		e := m.executors[id]
 		sb.WriteString(e.Name)
 		sb.WriteString(fmt.Sprintf("[msgBuffer cap=%d]: (", cap(e.messageBuffer)))
-		
+
 		depids := make([]uint32, 0, len(e.dependency))
 		for depid := range e.dependency {
 			depids = append(depids, depid)
@@ -268,5 +230,36 @@ func (m *TCController) String() string {
 	}
 	sb.WriteString(")\n")
 
+	return sb.String()
+}
+
+type ErrNoTermination struct{}
+
+func (ErrNoTermination) Error() string {
+	return "Error: No termination condition has been set!"
+}
+
+type ErrLoopDependency struct {
+	State State
+}
+
+func (e ErrLoopDependency) Error() string {
+	return "Error: Tasks has loop dependency."
+}
+
+type ErrAborted struct {
+	TaskErrors []*ErrorMessage
+	UndoErrors []*ErrorMessage
+	Cancelled  []*StateMessage
+}
+
+func (e ErrAborted) Error() string {
+	var sb strings.Builder
+	sb.WriteString("\n[x] TaskErrors:\n")
+	sb.WriteString((&ErrorList{Items: e.TaskErrors}).String())
+	sb.WriteString("\n[-] UndoErrors:\n")
+	sb.WriteString((&ErrorList{Items: e.UndoErrors}).String())
+	sb.WriteString("\n[/] Cancelled:\n")
+	sb.WriteString((&CancelList{Items: e.Cancelled}).String())
 	return sb.String()
 }
