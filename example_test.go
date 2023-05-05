@@ -63,7 +63,7 @@ func ExampleNewTCController() {
 
 	controller.SetTermination(MakeAndExpr(controller.NewTerminationExpr(foobar), controller.NewTerminationExpr(helloworld)))
 
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if err != nil {
 		panic(err)
 	}

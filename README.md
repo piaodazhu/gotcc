@@ -69,7 +69,7 @@ func main() {
 	controller.SetTermination(controller.NewTerminationExpr(taskD))
 	
 	// 5. Run the tasks
-	result, err := controller.RunTasks()
+	result, err := controller.Run()
 	if err != nil {
 		// get taskErrors: err.(ErrAborted).TaskErrors
 		// get undoErrors: err.(ErrAborted).UndoErrors
@@ -86,7 +86,7 @@ More detailed usage information can be found in test files, you can refer to `ex
 ## Specifications
 
 ### Execution
-In summary, a single execution of the TCController contains multiple tasks. There may be some dependencies between tasks, and the termination of the execution depends on the completion of some of these tasks. **Therefore, `controller.SetTermination` must be called before calling `controller.RunTasks`.**
+In summary, a single execution of the TCController contains multiple tasks. There may be some dependencies between tasks, and the termination of the execution depends on the completion of some of these tasks. **Therefore, `controller.SetTermination` must be called before calling `controller.Run`.**
 
 ### Task Function
 The task function must have this form：
@@ -120,7 +120,7 @@ When the undo function run, the arguments `args` is exactly the same as its corr
 
 ### Errors
 
-During the execution of TCController, multiple tasks may fail and after failure, multiple tasks may be cancelled. During rollback, multiple rollback functions may also encounter errors. Therefore, the error definitions in the return value of `RunTasks` are as follows:
+During the execution of TCController, multiple tasks may fail and after failure, multiple tasks may be cancelled. During rollback, multiple rollback functions may also encounter errors. Therefore, the error definitions in the return value of `Run` are as follows:
 ```go
 type ErrAborted struct {
 	TaskErrors *ErrorList
