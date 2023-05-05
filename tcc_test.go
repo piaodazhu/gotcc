@@ -3,6 +3,7 @@ package gotcc
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -122,6 +123,7 @@ type argsForTest struct {
 	id               int
 	taskShouldFailed bool
 	undoShouldFailed bool
+	infoShouldPrint  bool
 	sleepTime        int
 }
 
@@ -219,6 +221,97 @@ func TestCollectRollbackErrorsNoSkip(t *testing.T) {
 			sleepTime:        i,
 		}
 		task := controller.AddTask(strconv.Itoa(i), TaskMayFailed, arg).SetUndoFunc(UndoMayFailed, true)
+		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
+	}
+	controller.SetTermination(controller.NewTerminationExpr(end))
+	_, err := controller.RunTask()
+	if err == nil {
+		t.Fatal("Task not fail!")
+	} else {
+		t.Log(err)
+	}
+}
+
+type TaskState struct {
+	TS string
+}
+
+func (t TaskState) String() string {
+	return t.TS
+}
+
+func TaskMayFailedOrCancelled(args map[string]interface{}) (interface{}, error) {
+	select {
+	case <-time.After(time.Duration(args["BIND"].(argsForTest).sleepTime) * time.Millisecond * 10):
+		if args["BIND"].(argsForTest).taskShouldFailed {
+			return nil, ErrTaskFailed{args["BIND"].(argsForTest).id}
+		} else {
+			return "DONE", nil
+		}
+	case <-args["CANCEL"].(context.Context).Done():
+		return nil, ErrCancelled{TaskState{"ID-" + strconv.Itoa(args["BIND"].(argsForTest).id)}}
+	}
+}
+
+type ErrUndoFailedWithInfo struct{ info string }
+
+func (e ErrUndoFailedWithInfo) Error() string { return e.info }
+
+func UndoMayFailedWithInfo(args map[string]interface{}) error {
+	if args["BIND"].(argsForTest).undoShouldFailed == false {
+		return nil
+	} else {
+		if args["BIND"].(argsForTest).infoShouldPrint == false {
+			return ErrUndoFailed{args["BIND"].(argsForTest).id}
+		}
+		var info strings.Builder
+		info.WriteString("\n=====INFO======\n")
+		info.WriteString("Task errors: \n")
+		ems := args["TASKERR"].([]*ErrorMessage)
+		for _, em := range ems {
+			info.WriteString(em.TaskName)
+			info.WriteByte(':')
+			info.WriteString(em.Error.Error())
+			info.WriteByte('\n')
+		}
+		info.WriteString("Undo errors: \n")
+		ums := args["UNDOERR"].([]*ErrorMessage)
+		for _, um := range ums {
+			info.WriteString(um.TaskName)
+			info.WriteByte(':')
+			info.WriteString(um.Error.Error())
+			info.WriteByte('\n')
+		}
+		info.WriteString("Cancelled: \n")
+		sms := args["CANCELLED"].([]*StateMessage)
+		for _, sm := range sms {
+			info.WriteString(sm.TaskName)
+			info.WriteByte(':')
+			info.WriteString(sm.State.String())
+			info.WriteByte('\n')
+		}
+		return ErrUndoFailedWithInfo{info.String()}
+	}
+}
+
+func TestCollectAllErrorsNoSkip(t *testing.T) {
+	controller := NewTCController()
+	endarg := argsForTest{
+		id:               100,
+		taskShouldFailed: false,
+		sleepTime:        100,
+	}
+	end := controller.AddTask("mid", TaskMayFailedOrCancelled, endarg).SetUndoFunc(UndoMayFailedWithInfo, true)
+
+	for i := 0; i < 99; i++ {
+		arg := argsForTest{
+			id:               i,
+			taskShouldFailed: i == 96,                    // task 96 will fail
+			undoShouldFailed: i == 5 || i == 2 || i == 1, // undo 1 2 5 will fail
+			infoShouldPrint:  i == 1,
+			sleepTime:        i,
+		}
+		task := controller.AddTask(strconv.Itoa(i), TaskMayFailedOrCancelled, arg).SetUndoFunc(UndoMayFailedWithInfo, true)
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
