@@ -2,6 +2,8 @@ package gotcc
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -83,52 +85,16 @@ func (m *TCController) loopDependency() bool {
 	return false
 }
 
-type ErrNoTermination struct{}
-
-func (ErrNoTermination) Error() string {
-	return "Error: No termination condition has been set!"
-}
-
-type ErrAborted struct {
-	TaskErrors *ErrorList
-	UndoErrors *ErrorList
-	Cancelled  *CancelList
-}
-
-func (e ErrAborted) Error() string {
-	var sb strings.Builder
-	sb.WriteString("\n[x] TaskErrors:\n")
-	sb.WriteString(e.TaskErrors.String())
-	sb.WriteString("\n[-] UndoErrors:\n")
-	sb.WriteString(e.UndoErrors.String())
-	sb.WriteString("\n[/] Cancelled:\n")
-	sb.WriteString(e.Cancelled.String())
-	return sb.String()
-}
-
-type ErrCancelled struct {
-	State State
-}
-
-func (e ErrCancelled) Error() string {
-	return "Error: Task is canncelled due to other errors."
-}
-
-type ErrLoopDependency struct {
-	State State
-}
-
-func (e ErrLoopDependency) Error() string {
-	return "Error: Tasks has loop dependency."
-}
-
-func (m *TCController) RunTask() (map[string]interface{}, error) {
+func (m *TCController) Run() (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
 	}
 	if m.loopDependency() {
 		return nil, ErrLoopDependency{}
 	}
+
+	defer m.Reset()
+
 	wg := sync.WaitGroup{}
 	wg.Add(len(m.executors))
 	for taskid := range m.executors {
@@ -198,13 +164,102 @@ waitLoop:
 		// aborted because of some error
 		wg.Wait()
 		returnErr := ErrAborted{
-			TaskErrors: &m.errorMsgs,
-			Cancelled:  &m.cancelled,
+			TaskErrors: m.errorMsgs.Items,
+			Cancelled:  m.cancelled.Items,
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled)
-
+		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled).Items
+		fmt.Println(returnErr.Error())
 		return nil, returnErr
 	}
+}
+
+func (m *TCController) Reset() {
+	m.cancelCtx, m.cancelFunc = context.WithCancel(context.Background())
+	m.cancelled.Reset()
+	m.errorMsgs.Reset()
+	m.undoStack.Reset()
+	for _, e := range m.executors {
+		e.messageBuffer = make(chan Message, cap(e.messageBuffer))
+		for dep := range e.dependency {
+			e.dependency[dep] = false
+		}
+	}
+	for term := range m.termination.dependency {
+		m.termination.dependency[term] = false
+	}
+}
+
+func (m *TCController) String() string {
+	var sb strings.Builder
+	sb.WriteString("\ncanncelled list:\n")
+	sb.WriteString(m.cancelled.String())
+	sb.WriteString("errmessage list:\n")
+	sb.WriteString(m.errorMsgs.String())
+	sb.WriteString("tasks:\n")
+	ids := make([]uint32, 0, len(m.executors))
+	for id := range m.executors {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, id := range ids {
+		e := m.executors[id]
+		sb.WriteString(e.Name)
+		sb.WriteString(fmt.Sprintf("[msgBuffer cap=%d]: (", cap(e.messageBuffer)))
+
+		depids := make([]uint32, 0, len(e.dependency))
+		for depid := range e.dependency {
+			depids = append(depids, depid)
+		}
+		sort.Slice(depids, func(i, j int) bool { return depids[i] < depids[j] })
+		for _, depid := range depids {
+			sb.WriteString(m.executors[depid].Name)
+			sb.WriteString(", ")
+		}
+		sb.WriteString(")\n")
+	}
+	sb.WriteString(fmt.Sprintf("@termination[msgBuffer cap=%d]: (", cap(m.termination.messageBuffer)))
+	termids := make([]uint32, 0, len(m.termination.dependency))
+	for termid := range m.termination.dependency {
+		termids = append(termids, termid)
+	}
+	for _, termid := range termids {
+		sb.WriteString(m.executors[termid].Name)
+		sb.WriteString(", ")
+	}
+	sb.WriteString(")\n")
+
+	return sb.String()
+}
+
+type ErrNoTermination struct{}
+
+func (ErrNoTermination) Error() string {
+	return "Error: No termination condition has been set!"
+}
+
+type ErrLoopDependency struct {
+	State State
+}
+
+func (e ErrLoopDependency) Error() string {
+	return "Error: Tasks has loop dependency."
+}
+
+type ErrAborted struct {
+	TaskErrors []*ErrorMessage
+	UndoErrors []*ErrorMessage
+	Cancelled  []*StateMessage
+}
+
+func (e ErrAborted) Error() string {
+	var sb strings.Builder
+	sb.WriteString("\n[x] TaskErrors:\n")
+	sb.WriteString((&ErrorList{Items: e.TaskErrors}).String())
+	sb.WriteString("\n[-] UndoErrors:\n")
+	sb.WriteString((&ErrorList{Items: e.UndoErrors}).String())
+	sb.WriteString("\n[/] Cancelled:\n")
+	sb.WriteString((&CancelList{Items: e.Cancelled}).String())
+	return sb.String()
 }

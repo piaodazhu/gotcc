@@ -34,7 +34,7 @@ func TestNoTermination(t *testing.T) {
 
 	// controller.SetTermination(controller.NewTerminationExpr(F))
 
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if err, ok := err.(ErrNoTermination); !ok {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestLoopDependencyCond1(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if _, ok := err.(ErrLoopDependency); !ok {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestLoopDependencyCond2(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if _, ok := err.(ErrLoopDependency); !ok {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestLoopDependencyCond3(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	res, err := controller.RunTask()
+	res, err := controller.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,14 +130,14 @@ func TestLoopDependencyCond4(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if _, ok := err.(ErrLoopDependency); !ok {
 		t.Fatal(err)
 	}
 	t.Log(err.Error())
 }
 
-func TestRunTask(t *testing.T) {
+func TestRun(t *testing.T) {
 	controller := NewTCController()
 	A := controller.AddTask("A", TaskDefault, 1)
 	B := controller.AddTask("B", TaskDefault, 2)
@@ -153,7 +153,7 @@ func TestRunTask(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(F))
 
-	res, err := controller.RunTask()
+	res, err := controller.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,6 +161,39 @@ func TestRunTask(t *testing.T) {
 		t.Fatal(err)
 	} else if sum != 29 {
 		t.Fatal("Sum Error", sum)
+	}
+}
+
+func TestRunMultiple(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+	E := controller.AddTask("E", TaskDefault, 5)
+	F := controller.AddTask("F", TaskDefault, 6)
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B))) // 3 + 1 + 2 = 6
+	D.SetDependency(D.NewDependencyExpr(C))                                      // 4 + 6 = 10
+	E.SetDependency(MakeAndExpr(E.NewDependencyExpr(B), E.NewDependencyExpr(C))) // 5 + 2 + 6 = 13
+	F.SetDependency(MakeAndExpr(F.NewDependencyExpr(D), F.NewDependencyExpr(E))) // 6 + 10 + 13 = 29
+
+	controller.SetTermination(controller.NewTerminationExpr(F))
+
+	innerState := controller.String()
+	for i := 0; i < 4; i++ {
+		res, err := controller.Run()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sum, ok := res["F"]; !ok {
+			t.Fatal(err)
+		} else if sum != 29 {
+			t.Fatal("Sum Error", sum)
+		}
+		if controller.String() != innerState {
+			t.Fatal("Reset Error", controller.String(), innerState)
+		}
 	}
 }
 
@@ -173,7 +206,7 @@ func TestRunOneByOne(t *testing.T) {
 		last = task
 	}
 	controller.SetTermination(controller.NewTerminationExpr(last))
-	res, err := controller.RunTask()
+	res, err := controller.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +225,7 @@ func TestRunAll(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	res, err := controller.RunTask()
+	res, err := controller.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +297,7 @@ func TestCollectTaskErrors(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -292,7 +325,7 @@ func TestCollectRollbackErrors(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -320,7 +353,7 @@ func TestCollectRollbackErrorsNoSkip(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -345,7 +378,8 @@ func TaskMayFailedOrCancelled(args map[string]interface{}) (interface{}, error) 
 			return "DONE", nil
 		}
 	case <-args["CANCEL"].(context.Context).Done():
-		return nil, ErrCancelled{TaskState{"ID-" + strconv.Itoa(args["BIND"].(argsForTest).id)}}
+		err := ErrCancelled{}
+		return nil, ErrCancelled{TaskState{"ID-" + strconv.Itoa(args["BIND"].(argsForTest).id) + err.Error()}}
 	}
 }
 
@@ -411,7 +445,7 @@ func TestCollectAllErrorsNoSkip(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.RunTask()
+	_, err := controller.Run()
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {

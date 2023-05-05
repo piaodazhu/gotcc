@@ -34,6 +34,12 @@ func (el *ErrorList) Append(em *ErrorMessage) {
 	el.Lock.Unlock()
 }
 
+func (el *ErrorList) Reset() {
+	el.Lock.Lock()
+	el.Items = []*ErrorMessage{}
+	el.Lock.Unlock()
+}
+
 func (el *ErrorList) String() string {
 	var sb strings.Builder
 	el.Lock.Lock()
@@ -71,6 +77,12 @@ type CancelList struct {
 func (cl *CancelList) Append(sm *StateMessage) {
 	cl.Lock.Lock()
 	cl.Items = append(cl.Items, sm)
+	cl.Lock.Unlock()
+}
+
+func (cl *CancelList) Reset() {
+	cl.Lock.Lock()
+	cl.Items = []*StateMessage{}
 	cl.Lock.Unlock()
 }
 
