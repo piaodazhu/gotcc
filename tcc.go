@@ -117,13 +117,15 @@ func (m *TCController) Run() (map[string]interface{}, error) {
 			outMsg := Message{Sender: e.Id, SenderName: e.Name}
 			result, err := e.Task(args)
 			if err != nil {
-				if ec, isCancelled := err.(ErrCancelled); isCancelled {
-					m.cancelled.Append(NewStateMessage(e.Name, ec.State))
-				} else {
+				switch err := err.(type) {
+				case ErrSilentFail:
 					m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+				case ErrCancelled:
+					m.cancelled.Append(NewStateMessage(e.Name, err.State))
+				default:
+					m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+					m.cancelFunc()
 				}
-				// abort all task...
-				m.cancelFunc()
 				return
 			} else {
 				outMsg.Value = result
@@ -170,7 +172,7 @@ waitLoop:
 
 		// do the rollback
 		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled).Items
-		fmt.Println(returnErr.Error())
+		// fmt.Println(returnErr.Error())
 		return nil, returnErr
 	}
 }
@@ -257,9 +259,9 @@ func (e ErrAborted) Error() string {
 	var sb strings.Builder
 	sb.WriteString("\n[x] TaskErrors:\n")
 	sb.WriteString((&ErrorList{Items: e.TaskErrors}).String())
-	sb.WriteString("\n[-] UndoErrors:\n")
+	sb.WriteString("[-] UndoErrors:\n")
 	sb.WriteString((&ErrorList{Items: e.UndoErrors}).String())
-	sb.WriteString("\n[/] Cancelled:\n")
+	sb.WriteString("[/] Cancelled:\n")
 	sb.WriteString((&CancelList{Items: e.Cancelled}).String())
 	return sb.String()
 }

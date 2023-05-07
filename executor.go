@@ -72,3 +72,9 @@ type ErrCancelled struct {
 func (e ErrCancelled) Error() string {
 	return "Error: Task is canncelled due to other errors."
 }
+
+type ErrSilentFail struct{}
+
+func (e ErrSilentFail) Error() string {
+	return "Error: Task failed in silence."
+}

@@ -452,3 +452,54 @@ func TestCollectAllErrorsNoSkip(t *testing.T) {
 		t.Log(err)
 	}
 }
+
+func TaskSilentFail(args map[string]interface{}) (interface{}, error) {
+	return nil, ErrSilentFail{}
+}
+
+func TestSuccessWithSilentFail(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskSilentFail, nil)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+
+	C.SetDependency(MakeOrExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)))
+	D.SetDependency(D.NewDependencyExpr(C))
+
+	controller.SetTermination(controller.NewTerminationExpr(D))
+
+	res, err := controller.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum, ok := res["D"]; !ok {
+		t.Fatal(err)
+	} else if sum != 8 {
+		t.Fatal("Sum Error", sum)
+	}
+}
+
+func TaskMustFail(args map[string]interface{}) (interface{}, error) {
+	return nil, ErrTaskFailed{args["BIND"].(int)}
+}
+
+func TestFailedWithSilentFail(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskSilentFail, nil)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskMustFail, 4)
+
+	C.SetDependency(MakeOrExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)))
+	D.SetDependency(D.NewDependencyExpr(C))
+
+	controller.SetTermination(controller.NewTerminationExpr(D))
+
+	_, err := controller.Run()
+	if err == nil {
+		t.Fatal("Task not fail!")
+	} else {
+		t.Log(err)
+	}
+}
