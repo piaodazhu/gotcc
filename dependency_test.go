@@ -40,27 +40,27 @@ func TestDependency(t *testing.T) {
 			B.SetDependency(DefaultFalseExpr)
 		}
 
-		C.MarkDependency(A.Id, A.DependencyExpr()())
-		C.MarkDependency(B.Id, B.DependencyExpr()())
+		C.MarkDependency(A.Id, A.CalcDependency())
+		C.MarkDependency(B.Id, B.CalcDependency())
 
-		D.MarkDependency(A.Id, A.DependencyExpr()())
-		D.MarkDependency(B.Id, B.DependencyExpr()())
+		D.MarkDependency(A.Id, A.CalcDependency())
+		D.MarkDependency(B.Id, B.CalcDependency())
 
-		E.MarkDependency(D.Id, D.DependencyExpr()())
+		E.MarkDependency(D.Id, D.CalcDependency())
 
-		F.MarkDependency(B.Id, B.DependencyExpr()())
-		F.MarkDependency(D.Id, D.DependencyExpr()())
+		F.MarkDependency(B.Id, B.CalcDependency())
+		F.MarkDependency(D.Id, D.CalcDependency())
 
-		if valC != C.DependencyExpr()() {
+		if valC != C.CalcDependency() {
 			return false
 		}
-		if valD != D.DependencyExpr()() {
+		if valD != D.CalcDependency() {
 			return false
 		}
-		if valE != E.DependencyExpr()() {
+		if valE != E.CalcDependency() {
 			return false
 		}
-		if valF != F.DependencyExpr()() {
+		if valF != F.CalcDependency() {
 			return false
 		}
 		return true
@@ -68,21 +68,21 @@ func TestDependency(t *testing.T) {
 
 	// 0 0   0  0  1  0
 	if !checkResult(false, false, false, false, true, false) {
-		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
+		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
 	}
 
 	// 1 0   0  1  0  1
 	if !checkResult(true, false, false, true, false, true) {
-		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
+		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
 	}
 
 	// 0 1   0  1  0  0
 	if !checkResult(false, true, false, true, false, false) {
-		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
+		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
 	}
 
 	// 1 1   1  1  0  0
 	if !checkResult(true, true, true, true, false, false) {
-		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.DependencyExpr(), B.DependencyExpr(), C.DependencyExpr(), D.DependencyExpr(), E.DependencyExpr(), F.DependencyExpr())
+		t.Errorf("Error: A=%v, B=%v, C=%v, D=%v, E=%v, F=%v\n", A.CalcDependency(), B.CalcDependency(), C.CalcDependency(), D.CalcDependency(), E.CalcDependency(), F.CalcDependency())
 	}
 }

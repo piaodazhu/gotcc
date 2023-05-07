@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 func TaskDefault(args map[string]interface{}) (interface{}, error) {
@@ -34,8 +36,16 @@ func TestNoTermination(t *testing.T) {
 
 	// controller.SetTermination(controller.NewTerminationExpr(F))
 
-	_, err := controller.Run()
-	if err, ok := err.(ErrNoTermination); !ok {
+	_, err := controller.BatchRun()
+	if _, ok := err.(ErrNoTermination); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+
+	pool := NewDefaultPool(20)
+	defer pool.Close()
+	_, err = controller.PoolRun(pool)
+	if _, ok := err.(ErrNoTermination); !ok {
 		t.Fatal(err)
 	}
 	t.Log(err.Error())
@@ -56,7 +66,15 @@ func TestLoopDependencyCond1(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
+	if _, ok := err.(ErrLoopDependency); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+
+	pool := NewDefaultPool(2)
+	defer pool.Close()
+	_, err = controller.PoolRun(pool)
 	if _, ok := err.(ErrLoopDependency); !ok {
 		t.Fatal(err)
 	}
@@ -78,7 +96,7 @@ func TestLoopDependencyCond2(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
 	if _, ok := err.(ErrLoopDependency); !ok {
 		t.Fatal(err)
 	}
@@ -101,7 +119,7 @@ func TestLoopDependencyCond3(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	res, err := controller.Run()
+	res, err := controller.BatchRun()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,14 +148,40 @@ func TestLoopDependencyCond4(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(C))
 
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
 	if _, ok := err.(ErrLoopDependency); !ok {
 		t.Fatal(err)
 	}
 	t.Log(err.Error())
 }
 
-func TestRun(t *testing.T) {
+func TestPoolUnsupport(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+	E := controller.AddTask("E", TaskDefault, 5)
+	F := controller.AddTask("F", TaskDefault, 6)
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)))
+	D.SetDependency(D.NewDependencyExpr(C))
+	// make an 'OR' expr
+	E.SetDependency(MakeOrExpr(E.NewDependencyExpr(B), E.NewDependencyExpr(C)))
+	F.SetDependency(MakeAndExpr(F.NewDependencyExpr(D), F.NewDependencyExpr(E)))
+
+	controller.SetTermination(controller.NewTerminationExpr(F))
+
+	pool := NewDefaultPool(2)
+	defer pool.Close()
+	_, err := controller.PoolRun(pool)
+	if _, ok := err.(ErrPoolUnsupport); !ok {
+		t.Fatal(err)
+	}
+	t.Log(err.Error())
+}
+
+func TestBatchRun(t *testing.T) {
 	controller := NewTCController()
 	A := controller.AddTask("A", TaskDefault, 1)
 	B := controller.AddTask("B", TaskDefault, 2)
@@ -153,7 +197,7 @@ func TestRun(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(F))
 
-	res, err := controller.Run()
+	res, err := controller.BatchRun()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,6 +206,91 @@ func TestRun(t *testing.T) {
 	} else if sum != 29 {
 		t.Fatal("Sum Error", sum)
 	}
+}
+
+func TestPoolRun(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+	E := controller.AddTask("E", TaskDefault, 5)
+	F := controller.AddTask("F", TaskDefault, 6)
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B))) // 3 + 1 + 2 = 6
+	D.SetDependency(D.NewDependencyExpr(C))                                      // 4 + 6 = 10
+	E.SetDependency(MakeAndExpr(E.NewDependencyExpr(B), E.NewDependencyExpr(C))) // 5 + 2 + 6 = 13
+	F.SetDependency(MakeAndExpr(F.NewDependencyExpr(D), F.NewDependencyExpr(E))) // 6 + 10 + 13 = 29
+
+	controller.SetTermination(controller.NewTerminationExpr(F))
+
+	// auto-sized pool
+	pool := NewDefaultPool(0)
+	res, err := controller.PoolRun(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum, ok := res["F"]; !ok {
+		t.Fatal(err)
+	} else if sum != 29 {
+		t.Fatal("Sum Error", sum)
+	}
+	pool.Close()
+
+	// size=2 pool
+	pool = NewDefaultPool(2)
+	res, err = controller.PoolRun(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum, ok := res["F"]; !ok {
+		t.Fatal(err)
+	} else if sum != 29 {
+		t.Fatal("Sum Error", sum)
+	}
+	pool.Close()
+
+	// just goroutine
+	res, err = controller.PoolRun(DefaultNoPool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum, ok := res["F"]; !ok {
+		t.Fatal(err)
+	} else if sum != 29 {
+		t.Fatal("Sum Error", sum)
+	}
+	pool.Close()
+}
+
+func TestPoolRunError(t *testing.T) {
+	controller := NewTCController()
+	A := controller.AddTask("A", TaskDefault, 1)
+	B := controller.AddTask("B", TaskDefault, 2)
+	C := controller.AddTask("C", TaskDefault, 3)
+	D := controller.AddTask("D", TaskDefault, 4)
+	E := controller.AddTask("E", TaskDefault, 5)
+	F := controller.AddTask("F", TaskDefault, 6)
+
+	C.SetDependency(MakeAndExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B))) // 3 + 1 + 2 = 6
+	D.SetDependency(D.NewDependencyExpr(C))                                      // 4 + 6 = 10
+	E.SetDependency(MakeAndExpr(E.NewDependencyExpr(B), E.NewDependencyExpr(C))) // 5 + 2 + 6 = 13
+	F.SetDependency(MakeAndExpr(F.NewDependencyExpr(D), F.NewDependencyExpr(E))) // 6 + 10 + 13 = 29
+
+	controller.SetTermination(controller.NewTerminationExpr(F))
+
+	// should error!
+	pool, err := ants.NewPool(2, ants.WithNonblocking(true))
+	if err != nil {
+		panic(err)
+	}
+	defer pool.Release()
+
+	_, err = controller.PoolRun(DefaultPool{pool})
+	if err == nil {
+		t.Fatal("should error")
+	}
+	t.Log(err.Error())
 }
 
 func TestRunMultiple(t *testing.T) {
@@ -182,7 +311,25 @@ func TestRunMultiple(t *testing.T) {
 
 	innerState := controller.String()
 	for i := 0; i < 4; i++ {
-		res, err := controller.Run()
+		res, err := controller.BatchRun()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sum, ok := res["F"]; !ok {
+			t.Fatal(err)
+		} else if sum != 29 {
+			t.Fatal("Sum Error", sum)
+		}
+		if controller.String() != innerState {
+			t.Fatal("Reset Error", controller.String(), innerState)
+		}
+	}
+
+	pool := NewDefaultPool(2)
+	defer pool.Close()
+
+	for i := 0; i < 4; i++ {
+		res, err := controller.PoolRun(pool)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,7 +353,7 @@ func TestRunOneByOne(t *testing.T) {
 		last = task
 	}
 	controller.SetTermination(controller.NewTerminationExpr(last))
-	res, err := controller.Run()
+	res, err := controller.BatchRun()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +372,7 @@ func TestRunAll(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	res, err := controller.Run()
+	res, err := controller.BatchRun()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +405,7 @@ type argsForTest struct {
 
 func TaskMayFailed(args map[string]interface{}) (interface{}, error) {
 	select {
-	case <-time.After(time.Duration(args["BIND"].(argsForTest).sleepTime) * time.Millisecond * 10):
+	case <-time.After(time.Duration(args["BIND"].(argsForTest).sleepTime) * time.Millisecond * 3):
 		if args["BIND"].(argsForTest).taskShouldFailed {
 			return nil, ErrTaskFailed{args["BIND"].(argsForTest).id}
 		} else {
@@ -297,7 +444,7 @@ func TestCollectTaskErrors(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -325,7 +472,16 @@ func TestCollectRollbackErrors(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
+	if err == nil {
+		t.Fatal("Task not fail!")
+	} else {
+		t.Log(err)
+	}
+
+	pool := NewDefaultPool(20)
+	defer pool.Close()
+	_, err = controller.PoolRun(pool)
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -353,7 +509,16 @@ func TestCollectRollbackErrorsNoSkip(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
+	if err == nil {
+		t.Fatal("Task not fail!")
+	} else {
+		t.Log(err)
+	}
+
+	pool := NewDefaultPool(20)
+	defer pool.Close()
+	_, err = controller.PoolRun(pool)
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -371,7 +536,7 @@ func (t TaskState) String() string {
 
 func TaskMayFailedOrCancelled(args map[string]interface{}) (interface{}, error) {
 	select {
-	case <-time.After(time.Duration(args["BIND"].(argsForTest).sleepTime) * time.Millisecond * 10):
+	case <-time.After(time.Duration(args["BIND"].(argsForTest).sleepTime) * time.Millisecond * 3):
 		if args["BIND"].(argsForTest).taskShouldFailed {
 			return nil, ErrTaskFailed{args["BIND"].(argsForTest).id}
 		} else {
@@ -445,7 +610,16 @@ func TestCollectAllErrorsNoSkip(t *testing.T) {
 		end.SetDependency(MakeAndExpr(end.DependencyExpr(), end.NewDependencyExpr(task)))
 	}
 	controller.SetTermination(controller.NewTerminationExpr(end))
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
+	if err == nil {
+		t.Fatal("Task not fail!")
+	} else {
+		t.Log(err)
+	}
+
+	pool := NewDefaultPool(2)
+	defer pool.Close()
+	_, err = controller.PoolRun(pool)
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {
@@ -469,7 +643,7 @@ func TestSuccessWithSilentFail(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(D))
 
-	res, err := controller.Run()
+	res, err := controller.BatchRun()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +670,7 @@ func TestFailedWithSilentFail(t *testing.T) {
 
 	controller.SetTermination(controller.NewTerminationExpr(D))
 
-	_, err := controller.Run()
+	_, err := controller.BatchRun()
 	if err == nil {
 		t.Fatal("Task not fail!")
 	} else {

@@ -11,7 +11,8 @@ Features of `gotcc`
 - Support dependency logic expressions: `not`, `and`, `or`, `xor` and any combination of them.
 - Many-to-many result delivery between tasks.
 - Support tasks rollback in case of any error.
-- Support multiple error collection.
+- Support multiple errors collection.
+- Support coroutine pool: default(panjf2000/ants) or user-defined coroutine pool.
 
 ## Installation
 
@@ -69,7 +70,7 @@ func main() {
 	controller.SetTermination(controller.NewTerminationExpr(taskD))
 	
 	// 5. Run the tasks
-	result, err := controller.Run()
+	result, err := controller.BatchRun()
 	if err != nil {
 		// get taskErrors: err.(ErrAborted).TaskErrors
 		// get undoErrors: err.(ErrAborted).UndoErrors
@@ -94,6 +95,7 @@ The task function must have this form：
 func (args map[string]interface{}) (interface{}, error)
 ```
 There are some built-in keys when running the task function:
+- `NAME`: the value is the name of this task.
 - `BIND`: the value is the third arguments when `controller.AddTask()` was called.
 - `CANCEL`: the value is a context.Context, with cancel.
 
@@ -105,6 +107,8 @@ The undo function must have this form：
 func (args map[string]interface{}) error
 ```
 There are some built-in keys when running the undo function:
+- `NAME`: the value is the name of this task.
+- `BIND`: the value is the third arguments when `controller.AddTask()` was called.
 - `TASKERR`: the value type is `[]*gotcc.ErrorMessage`, recording the errors of tasks execution.
 - `UNDOERR`: the value type is `[]*gotcc.ErrorMessage`, recording the previous errors of undo execution.
 - `CANCELLED`: the value type is `[]*gotcc.StateMessage`, recording the state of canncelld task. (For example, what process in that task has been done before cancelled.)
@@ -123,19 +127,21 @@ When the undo function run, the arguments `args` is exactly the same as its corr
 During the execution of TCController, multiple tasks may fail and after failure, multiple tasks may be cancelled. During rollback, multiple rollback functions may also encounter errors. Therefore, the error definitions in the return value of `Run` are as follows:
 ```go
 type ErrAborted struct {
-	TaskErrors *ErrorList
-	UndoErrors *ErrorList
-}
-
-type ErrorList struct {
-	Lock  sync.Mutex
-	Items []*ErrorMessage
+	TaskErrors []*ErrorMessage
+	UndoErrors []*ErrorMessage
+	Cancelled  []*StateMessage
 }
 
 type ErrorMessage struct {
 	TaskName string
 	Error    error
 }
+
+type StateMessage struct {
+	TaskName string
+	State    State
+}
+
 ```
 
 ### Dependency Expression
