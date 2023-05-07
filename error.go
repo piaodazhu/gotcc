@@ -56,4 +56,3 @@ type ErrPoolUnsupport struct{}
 func (ErrPoolUnsupport) Error() string {
 	return "Error: PoolRun is not support when any dependency is not AND!"
 }
-

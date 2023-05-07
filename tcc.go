@@ -43,6 +43,10 @@ func (m *TCController) SetTermination(Expr DependencyExpression) {
 	m.termination.SetDependency(Expr)
 }
 
+func (m *TCController) TerminationExpr() DependencyExpression {
+	return m.termination.dependencyExpr
+}
+
 func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	if _, exists := m.termination.dependency[d.Id]; !exists {
 		m.termination.dependency[d.Id] = false

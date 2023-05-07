@@ -668,7 +668,7 @@ func TestFailedWithSilentFail(t *testing.T) {
 	C.SetDependency(MakeOrExpr(C.NewDependencyExpr(A), C.NewDependencyExpr(B)))
 	D.SetDependency(D.NewDependencyExpr(C))
 
-	controller.SetTermination(controller.NewTerminationExpr(D))
+	controller.SetTermination(MakeAndExpr(controller.TerminationExpr(), controller.NewTerminationExpr(D)))
 
 	_, err := controller.BatchRun()
 	if err == nil {
