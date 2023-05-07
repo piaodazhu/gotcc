@@ -43,6 +43,10 @@ func (m *TCController) SetTermination(Expr DependencyExpression) {
 	m.termination.SetDependency(Expr)
 }
 
+func (m *TCController) TerminationExpr() DependencyExpression {
+	return m.termination.dependencyExpr
+}
+
 func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	if _, exists := m.termination.dependency[d.Id]; !exists {
 		m.termination.dependency[d.Id] = false
@@ -52,44 +56,11 @@ func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
 	return newDependencyExpr(m.termination.dependency, d.Id)
 }
 
-func (m *TCController) loopDependency() bool {
-	const (
-		white = 0
-		gray  = 1
-		black = 2
-	)
-	color := map[uint32]int{}
-	var dfs func(curr uint32) bool
-	dfs = func(curr uint32) bool {
-		color[curr] = gray
-		for neighbor := range m.executors[curr].dependency {
-			switch color[neighbor] {
-			case white:
-				if dfs(neighbor) {
-					return true
-				}
-			case gray:
-				return true
-			case black:
-			}
-		}
-		color[curr] = black
-		return false
-	}
-
-	for taskid := range m.executors {
-		if dfs(taskid) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *TCController) Run() (map[string]interface{}, error) {
+func (m *TCController) BatchRun() (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
 	}
-	if m.loopDependency() {
+	if _, noloop := m.analyzeDependency(); !noloop {
 		return nil, ErrLoopDependency{}
 	}
 
@@ -101,9 +72,9 @@ func (m *TCController) Run() (map[string]interface{}, error) {
 		e := m.executors[taskid]
 		go func() {
 			defer wg.Done()
-			args := map[string]interface{}{"BIND": e.BindArgs, "CANCEL": m.cancelCtx}
+			args := map[string]interface{}{"BIND": e.BindArgs, "CANCEL": m.cancelCtx, "NAME": e.Name}
 
-			for !e.dependencyExpr() {
+			for !e.dependencyExpr.f() {
 				// wait until dep ok
 				select {
 				case <-m.cancelCtx.Done():
@@ -146,7 +117,7 @@ func (m *TCController) Run() (map[string]interface{}, error) {
 	Aborted := false
 
 waitLoop:
-	for !t.dependencyExpr() {
+	for !t.dependencyExpr.f() {
 		select {
 		case <-m.cancelCtx.Done():
 			// aborted
@@ -232,36 +203,5 @@ func (m *TCController) String() string {
 	}
 	sb.WriteString(")\n")
 
-	return sb.String()
-}
-
-type ErrNoTermination struct{}
-
-func (ErrNoTermination) Error() string {
-	return "Error: No termination condition has been set!"
-}
-
-type ErrLoopDependency struct {
-	State State
-}
-
-func (e ErrLoopDependency) Error() string {
-	return "Error: Tasks has loop dependency."
-}
-
-type ErrAborted struct {
-	TaskErrors []*ErrorMessage
-	UndoErrors []*ErrorMessage
-	Cancelled  []*StateMessage
-}
-
-func (e ErrAborted) Error() string {
-	var sb strings.Builder
-	sb.WriteString("\n[x] TaskErrors:\n")
-	sb.WriteString((&ErrorList{Items: e.TaskErrors}).String())
-	sb.WriteString("[-] UndoErrors:\n")
-	sb.WriteString((&ErrorList{Items: e.UndoErrors}).String())
-	sb.WriteString("[/] Cancelled:\n")
-	sb.WriteString((&CancelList{Items: e.Cancelled}).String())
 	return sb.String()
 }

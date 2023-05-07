@@ -55,6 +55,10 @@ func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
 	return e
 }
 
+func (e *Executor) CalcDependency() bool {
+	return e.dependencyExpr.f()
+}
+
 func (e *Executor) MarkDependency(id uint32, finished bool) {
 	e.dependency[id] = finished
 }
@@ -63,18 +67,4 @@ func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, Ski
 	e.Undo = undo
 	e.UndoSkipError = SkipError
 	return e
-}
-
-type ErrCancelled struct {
-	State State
-}
-
-func (e ErrCancelled) Error() string {
-	return "Error: Task is canncelled due to other errors."
-}
-
-type ErrSilentFail struct{}
-
-func (e ErrSilentFail) Error() string {
-	return "Error: Task failed in silence."
 }
