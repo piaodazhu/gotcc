@@ -9,29 +9,6 @@ type DependencyExpression struct {
 	allAnd bool
 }
 
-func newDependencyExpr(valMap map[uint32]bool, key uint32) DependencyExpression {
-	return DependencyExpression{
-		f: func() bool {
-			return valMap[key]
-		},
-		allAnd: true,
-	}
-}
-
-var DefaultTrueExpr = DependencyExpression{
-	f: func() bool {
-		return true
-	},
-	allAnd: true,
-}
-
-var DefaultFalseExpr = DependencyExpression{
-	f: func() bool {
-		return false
-	},
-	allAnd: true,
-}
-
 func MakeNotExpr(Expr DependencyExpression) DependencyExpression {
 	return DependencyExpression{
 		f: func() bool {
@@ -68,38 +45,14 @@ func MakeXorExpr(Expr1 DependencyExpression, Expr2 DependencyExpression) Depende
 	}
 }
 
-// func (m *TCController) loopDependency() bool {
-// 	const (
-// 		white = 0
-// 		gray  = 1
-// 		black = 2
-// 	)
-// 	color := map[uint32]int{}
-// 	var dfs func(curr uint32) bool
-// 	dfs = func(curr uint32) bool {
-// 		color[curr] = gray
-// 		for neighbor := range m.executors[curr].dependency {
-// 			switch color[neighbor] {
-// 			case white:
-// 				if dfs(neighbor) {
-// 					return true
-// 				}
-// 			case gray:
-// 				return true
-// 			case black:
-// 			}
-// 		}
-// 		color[curr] = black
-// 		return false
-// 	}
-
-// 	for taskid := range m.executors {
-// 		if dfs(taskid) {
-// 			return true
-// 		}
-// 	}
-// 	return false
-// }
+func newDependencyExpr(valMap map[uint32]bool, key uint32) DependencyExpression {
+	return DependencyExpression{
+		f: func() bool {
+			return valMap[key]
+		},
+		allAnd: true,
+	}
+}
 
 func (m *TCController) analyzeDependency() (map[uint32]int, bool) {
 	const (
@@ -168,7 +121,7 @@ func (m *TCController) sortExecutor(taskorder map[uint32]int) ([]uint32, bool) {
 		}
 		itemlist = append(itemlist, item{
 			taskid:   taskid,
-			taskname: e.Name,
+			taskname: e.name,
 			order:    order,
 		})
 	}
@@ -182,4 +135,20 @@ func (m *TCController) sortExecutor(taskorder map[uint32]int) ([]uint32, bool) {
 		res = append(res, itemlist[i].taskid)
 	}
 	return res, true
+}
+
+// default dependency expression: always return true
+var DefaultTrueExpr = DependencyExpression{
+	f: func() bool {
+		return true
+	},
+	allAnd: true,
+}
+
+// default dependency expression: always return false
+var DefaultFalseExpr = DependencyExpression{
+	f: func() bool {
+		return false
+	},
+	allAnd: true,
 }

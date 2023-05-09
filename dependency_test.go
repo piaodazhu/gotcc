@@ -40,16 +40,16 @@ func TestDependency(t *testing.T) {
 			B.SetDependency(DefaultFalseExpr)
 		}
 
-		C.MarkDependency(A.Id, A.CalcDependency())
-		C.MarkDependency(B.Id, B.CalcDependency())
+		C.MarkDependency(A.id, A.CalcDependency())
+		C.MarkDependency(B.id, B.CalcDependency())
 
-		D.MarkDependency(A.Id, A.CalcDependency())
-		D.MarkDependency(B.Id, B.CalcDependency())
+		D.MarkDependency(A.id, A.CalcDependency())
+		D.MarkDependency(B.id, B.CalcDependency())
 
-		E.MarkDependency(D.Id, D.CalcDependency())
+		E.MarkDependency(D.id, D.CalcDependency())
 
-		F.MarkDependency(B.Id, B.CalcDependency())
-		F.MarkDependency(D.Id, D.CalcDependency())
+		F.MarkDependency(B.id, B.CalcDependency())
+		F.MarkDependency(D.id, D.CalcDependency())
 
 		if valC != C.CalcDependency() {
 			return false

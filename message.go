@@ -5,10 +5,10 @@ import (
 	"sync"
 )
 
-type Message struct {
-	Sender     uint32
-	SenderName string
-	Value      interface{}
+type message struct {
+	senderId   uint32
+	senderName string
+	value      interface{}
 }
 
 type ErrorMessage struct {
@@ -23,33 +23,33 @@ func NewErrorMessage(taskName string, err error) *ErrorMessage {
 	}
 }
 
-type ErrorList struct {
-	Lock  sync.Mutex
-	Items []*ErrorMessage
+type errorLisk struct {
+	lock  sync.Mutex
+	items []*ErrorMessage
 }
 
-func (el *ErrorList) Append(em *ErrorMessage) {
-	el.Lock.Lock()
-	el.Items = append(el.Items, em)
-	el.Lock.Unlock()
+func (el *errorLisk) append(em *ErrorMessage) {
+	el.lock.Lock()
+	el.items = append(el.items, em)
+	el.lock.Unlock()
 }
 
-func (el *ErrorList) Reset() {
-	el.Lock.Lock()
-	el.Items = []*ErrorMessage{}
-	el.Lock.Unlock()
+func (el *errorLisk) reset() {
+	el.lock.Lock()
+	el.items = []*ErrorMessage{}
+	el.lock.Unlock()
 }
 
-func (el *ErrorList) String() string {
+func (el *errorLisk) String() string {
 	var sb strings.Builder
-	el.Lock.Lock()
-	for i := range el.Items {
-		sb.WriteString(el.Items[i].TaskName)
+	el.lock.Lock()
+	for i := range el.items {
+		sb.WriteString(el.items[i].TaskName)
 		sb.WriteString(": ")
-		sb.WriteString(el.Items[i].Error.Error())
+		sb.WriteString(el.items[i].Error.Error())
 		sb.WriteString("\n")
 	}
-	el.Lock.Unlock()
+	el.lock.Unlock()
 	return sb.String()
 }
 
@@ -69,32 +69,32 @@ func NewStateMessage(taskName string, state State) *StateMessage {
 	}
 }
 
-type CancelList struct {
-	Lock  sync.Mutex
-	Items []*StateMessage
+type cancelList struct {
+	lock  sync.Mutex
+	items []*StateMessage
 }
 
-func (cl *CancelList) Append(sm *StateMessage) {
-	cl.Lock.Lock()
-	cl.Items = append(cl.Items, sm)
-	cl.Lock.Unlock()
+func (cl *cancelList) append(sm *StateMessage) {
+	cl.lock.Lock()
+	cl.items = append(cl.items, sm)
+	cl.lock.Unlock()
 }
 
-func (cl *CancelList) Reset() {
-	cl.Lock.Lock()
-	cl.Items = []*StateMessage{}
-	cl.Lock.Unlock()
+func (cl *cancelList) reset() {
+	cl.lock.Lock()
+	cl.items = []*StateMessage{}
+	cl.lock.Unlock()
 }
 
-func (cl *CancelList) String() string {
+func (cl *cancelList) String() string {
 	var sb strings.Builder
-	cl.Lock.Lock()
-	for i := range cl.Items {
-		sb.WriteString(cl.Items[i].TaskName)
+	cl.lock.Lock()
+	for i := range cl.items {
+		sb.WriteString(cl.items[i].TaskName)
 		sb.WriteString(": ")
-		sb.WriteString(cl.Items[i].State.String())
+		sb.WriteString(cl.items[i].State.String())
 		sb.WriteString("\n")
 	}
-	cl.Lock.Unlock()
+	cl.lock.Unlock()
 	return sb.String()
 }

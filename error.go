@@ -43,11 +43,11 @@ type ErrAborted struct {
 func (e ErrAborted) Error() string {
 	var sb strings.Builder
 	sb.WriteString("\n[x] TaskErrors:\n")
-	sb.WriteString((&ErrorList{Items: e.TaskErrors}).String())
+	sb.WriteString((&errorLisk{items: e.TaskErrors}).String())
 	sb.WriteString("[-] UndoErrors:\n")
-	sb.WriteString((&ErrorList{Items: e.UndoErrors}).String())
+	sb.WriteString((&errorLisk{items: e.UndoErrors}).String())
 	sb.WriteString("[/] Cancelled:\n")
-	sb.WriteString((&CancelList{Items: e.Cancelled}).String())
+	sb.WriteString((&cancelList{items: e.Cancelled}).String())
 	return sb.String()
 }
 

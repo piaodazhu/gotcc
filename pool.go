@@ -10,35 +10,6 @@ type GoroutinePool interface {
 	Go(task func()) error
 }
 
-type DefaultNoPool struct{}
-
-func (DefaultNoPool) Go(task func()) error {
-	go task()
-	return nil
-}
-
-type DefaultPool struct {
-	pool *ants.Pool
-}
-
-func NewDefaultPool(size int) DefaultPool {
-	if size <= 0 {
-		pool, _ := ants.NewPool(size)
-		return DefaultPool{pool}
-	} else {
-		pool, _ := ants.NewPool(size, ants.WithPreAlloc(true))
-		return DefaultPool{pool}
-	}
-}
-
-func (p DefaultPool) Go(task func()) error {
-	return p.pool.Submit(task)
-}
-
-func (p DefaultPool) Close() {
-	p.pool.Release()
-}
-
 func (m *TCController) PoolRun(pool GoroutinePool) (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
@@ -52,7 +23,7 @@ func (m *TCController) PoolRun(pool GoroutinePool) (map[string]interface{}, erro
 		return nil, ErrPoolUnsupport{}
 	}
 
-	defer m.Reset()
+	defer m.reset()
 
 	wg := sync.WaitGroup{}
 lauchLoop:
@@ -61,7 +32,7 @@ lauchLoop:
 		wg.Add(1)
 		err := pool.Go(func() {
 			defer wg.Done()
-			args := map[string]interface{}{"BIND": e.BindArgs, "CANCEL": m.cancelCtx, "NAME": e.Name}
+			args := map[string]interface{}{"BIND": e.bindArgs, "CANCEL": m.cancelCtx, "NAME": e.name}
 
 			for !e.dependencyExpr.f() {
 				// wait until dep ok
@@ -69,29 +40,29 @@ lauchLoop:
 				case <-m.cancelCtx.Done():
 					return
 				case msg := <-e.messageBuffer:
-					e.MarkDependency(msg.Sender, true)
-					args[msg.SenderName] = msg.Value
+					e.MarkDependency(msg.senderId, true)
+					args[msg.senderName] = msg.value
 				}
 			}
 
-			outMsg := Message{Sender: e.Id, SenderName: e.Name}
-			result, err := e.Task(args)
+			outMsg := message{senderId: e.id, senderName: e.name}
+			result, err := e.task(args)
 			if err != nil {
 				switch err := err.(type) {
 				// case ErrSilentFail:
 				// 	m.errorMsgs.Append(NewErrorMessage(e.Name, err))
 				case ErrCancelled:
-					m.cancelled.Append(NewStateMessage(e.Name, err.State))
+					m.cancelled.append(NewStateMessage(e.name, err.State))
 				default:
-					m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+					m.errorMsgs.append(NewErrorMessage(e.name, err))
 					m.cancelFunc()
 				}
 				return
 			} else {
-				outMsg.Value = result
+				outMsg.value = result
 
 				// add to finished stack...
-				m.undoStack.Push(NewUndoFunc(e.Name, e.UndoSkipError, e.Undo, args))
+				m.undoStack.push(newUndoFunc(e.name, e.undoSkipError, e.undo, args))
 			}
 
 			for _, subscriber := range e.subscribers {
@@ -121,8 +92,8 @@ waitLoop:
 			Aborted = true
 			break waitLoop
 		case msg := <-t.messageBuffer:
-			t.MarkDependency(msg.Sender, true)
-			Results[msg.SenderName] = msg.Value
+			t.MarkDependency(msg.senderId, true)
+			Results[msg.senderName] = msg.value
 		}
 	}
 	if !Aborted {
@@ -134,13 +105,44 @@ waitLoop:
 		// aborted because of some error
 		wg.Wait()
 		returnErr := ErrAborted{
-			TaskErrors: m.errorMsgs.Items,
-			Cancelled:  m.cancelled.Items,
+			TaskErrors: m.errorMsgs.items,
+			Cancelled:  m.cancelled.items,
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled).Items
+		returnErr.UndoErrors = m.undoStack.undoAll(&m.errorMsgs, &m.cancelled).items
 		// fmt.Println(returnErr.Error())
 		return nil, returnErr
 	}
+}
+
+// Default coroutine pool: actually not a coroutine pool but only launch new goroutines.
+type DefaultNoPool struct{}
+
+func (DefaultNoPool) Go(task func()) error {
+	go task()
+	return nil
+}
+
+// Default coroutine pool: base on ants pool.
+type DefaultPool struct {
+	pool *ants.Pool
+}
+
+func NewDefaultPool(size int) DefaultPool {
+	if size <= 0 {
+		pool, _ := ants.NewPool(size)
+		return DefaultPool{pool}
+	} else {
+		pool, _ := ants.NewPool(size, ants.WithPreAlloc(true))
+		return DefaultPool{pool}
+	}
+}
+
+func (p DefaultPool) Go(task func()) error {
+	return p.pool.Submit(task)
+}
+
+func (p DefaultPool) Close() {
+	p.pool.Release()
 }
