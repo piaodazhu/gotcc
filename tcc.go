@@ -83,45 +83,7 @@ func (m *TCController) BatchRun() (map[string]interface{}, error) {
 	wg.Add(len(m.executors))
 	for taskid := range m.executors {
 		e := m.executors[taskid]
-		go func() {
-			defer wg.Done()
-			args := map[string]interface{}{"BIND": e.bindArgs, "CANCEL": m.cancelCtx, "NAME": e.name}
-
-			for !e.dependencyExpr.f() {
-				// wait until dep ok
-				select {
-				case <-m.cancelCtx.Done():
-					return
-				case msg := <-e.messageBuffer:
-					e.markDependency(msg.senderId, true)
-					args[msg.senderName] = msg.value
-				}
-			}
-
-			outMsg := message{senderId: e.id, senderName: e.name}
-			result, err := e.task(args)
-			if err != nil {
-				switch err := err.(type) {
-				case ErrSilentFail:
-					m.errorMsgs.append(newErrorMessage(e.name, err))
-				case ErrCancelled:
-					m.cancelled.append(newStateMessage(e.name, err.State))
-				default:
-					m.errorMsgs.append(newErrorMessage(e.name, err))
-					m.cancelFunc()
-				}
-				return
-			} else {
-				outMsg.value = result
-
-				// add to finished stack...
-				m.undoStack.push(newUndoFunc(e.name, e.undoSkipError, e.undo, args))
-			}
-
-			for _, subscriber := range e.subscribers {
-				*subscriber <- outMsg
-			}
-		}()
+		go m.launch(e, &wg)
 	}
 
 	// wait termination
@@ -158,6 +120,46 @@ waitLoop:
 		returnErr.UndoErrors = m.undoStack.undoAll(&m.errorMsgs, &m.cancelled).items
 		// fmt.Println(returnErr.Error())
 		return nil, returnErr
+	}
+}
+
+func (m *TCController) launch(e *Executor, wg *sync.WaitGroup) {
+	defer wg.Done()
+	args := map[string]interface{}{"BIND": e.bindArgs, "CANCEL": m.cancelCtx, "NAME": e.name}
+
+	for !e.dependencyExpr.f() {
+		// wait until dep ok
+		select {
+		case <-m.cancelCtx.Done():
+			return
+		case msg := <-e.messageBuffer:
+			e.markDependency(msg.senderId, true)
+			args[msg.senderName] = msg.value
+		}
+	}
+
+	outMsg := message{senderId: e.id, senderName: e.name}
+	result, err := e.task(args)
+	if err != nil {
+		switch err := err.(type) {
+		case ErrSilentFail:
+			m.errorMsgs.append(newErrorMessage(e.name, err))
+		case ErrCancelled:
+			m.cancelled.append(newStateMessage(e.name, err.State))
+		default:
+			m.errorMsgs.append(newErrorMessage(e.name, err))
+			m.cancelFunc()
+		}
+		return
+	} else {
+		outMsg.value = result
+
+		// add to finished stack...
+		m.undoStack.push(newUndoFunc(e.name, e.undoSkipError, e.undo, args))
+	}
+
+	for _, subscriber := range e.subscribers {
+		*subscriber <- outMsg
 	}
 }
 

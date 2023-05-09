@@ -35,43 +35,7 @@ lauchLoop:
 		e := m.executors[taskid]
 		wg.Add(1)
 		err := pool.Go(func() {
-			defer wg.Done()
-			args := map[string]interface{}{"BIND": e.bindArgs, "CANCEL": m.cancelCtx, "NAME": e.name}
-
-			for !e.dependencyExpr.f() {
-				// wait until dep ok
-				select {
-				case <-m.cancelCtx.Done():
-					return
-				case msg := <-e.messageBuffer:
-					e.markDependency(msg.senderId, true)
-					args[msg.senderName] = msg.value
-				}
-			}
-
-			outMsg := message{senderId: e.id, senderName: e.name}
-			result, err := e.task(args)
-			if err != nil {
-				switch err := err.(type) {
-				// case ErrSilentFail:
-				// 	m.errorMsgs.Append(newErrorMessage(e.Name, err))
-				case ErrCancelled:
-					m.cancelled.append(newStateMessage(e.name, err.State))
-				default:
-					m.errorMsgs.append(newErrorMessage(e.name, err))
-					m.cancelFunc()
-				}
-				return
-			} else {
-				outMsg.value = result
-
-				// add to finished stack...
-				m.undoStack.push(newUndoFunc(e.name, e.undoSkipError, e.undo, args))
-			}
-
-			for _, subscriber := range e.subscribers {
-				*subscriber <- outMsg
-			}
+			m.launch(e, &wg)
 		})
 		if err != nil {
 			return nil, err
