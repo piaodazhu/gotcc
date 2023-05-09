@@ -8,6 +8,7 @@ import (
 	"sync"
 )
 
+// Task Concurrency Controller
 type TCController struct {
 	executors map[uint32]*Executor
 
@@ -16,11 +17,12 @@ type TCController struct {
 
 	termination *Executor
 
-	cancelled CancelList
-	errorMsgs ErrorList
-	undoStack UndoStack
+	cancelled cancelList
+	errorMsgs errorLisk
+	undoStack undoStack
 }
 
+// Create an empty task concurrency controller
 func NewTCController() *TCController {
 	ctx, cf := context.WithCancel(context.Background())
 	return &TCController{
@@ -28,34 +30,45 @@ func NewTCController() *TCController {
 		cancelCtx:   ctx,
 		cancelFunc:  cf,
 		termination: newExecutor("TERMINATION", nil, nil),
-		errorMsgs:   ErrorList{},
-		undoStack:   UndoStack{},
+		cancelled:   cancelList{},
+		errorMsgs:   errorLisk{},
+		undoStack:   undoStack{},
 	}
 }
 
+// Add a task to the controller. `name` is a user-defined string identifier of the task.
+// `f` is the task function. `args` is arguments bind with the task, which can be obtained
+// inside the task function from args["BIND"].
 func (m *TCController) AddTask(name string, f func(args map[string]interface{}) (interface{}, error), args interface{}) *Executor {
 	e := newExecutor(name, f, args)
-	m.executors[e.Id] = e
+	m.executors[e.id] = e
 	return e
 }
 
+// Set termination condition for the controller. `Expr` is a dependency expression.
 func (m *TCController) SetTermination(Expr DependencyExpression) {
 	m.termination.SetDependency(Expr)
 }
 
+// Get termination condition of the controller.
 func (m *TCController) TerminationExpr() DependencyExpression {
 	return m.termination.dependencyExpr
 }
 
+// Create a termination dependency expression for the controller.
+// It means the execution termination may depend on task `d`.
 func (m *TCController) NewTerminationExpr(d *Executor) DependencyExpression {
-	if _, exists := m.termination.dependency[d.Id]; !exists {
-		m.termination.dependency[d.Id] = false
-		m.termination.messageBuffer = make(chan Message, cap(m.termination.messageBuffer)+1)
+	if _, exists := m.termination.dependency[d.id]; !exists {
+		m.termination.dependency[d.id] = false
+		m.termination.messageBuffer = make(chan message, cap(m.termination.messageBuffer)+1)
 		d.subscribers = append(d.subscribers, &m.termination.messageBuffer)
 	}
-	return newDependencyExpr(m.termination.dependency, d.Id)
+	return newDependencyExpr(m.termination.dependency, d.id)
 }
 
+// Run the execution. If success, return a map[name]value, where names are task
+// of termination dependent tasks and values are their return value.
+// If failed, return ErrNoTermination, ErrLoopDependency or ErrAborted
 func (m *TCController) BatchRun() (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
@@ -64,7 +77,7 @@ func (m *TCController) BatchRun() (map[string]interface{}, error) {
 		return nil, ErrLoopDependency{}
 	}
 
-	defer m.Reset()
+	defer m.reset()
 
 	wg := sync.WaitGroup{}
 	wg.Add(len(m.executors))
@@ -72,7 +85,7 @@ func (m *TCController) BatchRun() (map[string]interface{}, error) {
 		e := m.executors[taskid]
 		go func() {
 			defer wg.Done()
-			args := map[string]interface{}{"BIND": e.BindArgs, "CANCEL": m.cancelCtx, "NAME": e.Name}
+			args := map[string]interface{}{"BIND": e.bindArgs, "CANCEL": m.cancelCtx, "NAME": e.name}
 
 			for !e.dependencyExpr.f() {
 				// wait until dep ok
@@ -80,29 +93,29 @@ func (m *TCController) BatchRun() (map[string]interface{}, error) {
 				case <-m.cancelCtx.Done():
 					return
 				case msg := <-e.messageBuffer:
-					e.MarkDependency(msg.Sender, true)
-					args[msg.SenderName] = msg.Value
+					e.markDependency(msg.senderId, true)
+					args[msg.senderName] = msg.value
 				}
 			}
 
-			outMsg := Message{Sender: e.Id, SenderName: e.Name}
-			result, err := e.Task(args)
+			outMsg := message{senderId: e.id, senderName: e.name}
+			result, err := e.task(args)
 			if err != nil {
 				switch err := err.(type) {
 				case ErrSilentFail:
-					m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+					m.errorMsgs.append(newErrorMessage(e.name, err))
 				case ErrCancelled:
-					m.cancelled.Append(NewStateMessage(e.Name, err.State))
+					m.cancelled.append(newStateMessage(e.name, err.State))
 				default:
-					m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+					m.errorMsgs.append(newErrorMessage(e.name, err))
 					m.cancelFunc()
 				}
 				return
 			} else {
-				outMsg.Value = result
+				outMsg.value = result
 
 				// add to finished stack...
-				m.undoStack.Push(NewUndoFunc(e.Name, e.UndoSkipError, e.Undo, args))
+				m.undoStack.push(newUndoFunc(e.name, e.undoSkipError, e.undo, args))
 			}
 
 			for _, subscriber := range e.subscribers {
@@ -124,8 +137,8 @@ waitLoop:
 			Aborted = true
 			break waitLoop
 		case msg := <-t.messageBuffer:
-			t.MarkDependency(msg.Sender, true)
-			Results[msg.SenderName] = msg.Value
+			t.markDependency(msg.senderId, true)
+			Results[msg.senderName] = msg.value
 		}
 	}
 	if !Aborted {
@@ -137,24 +150,24 @@ waitLoop:
 		// aborted because of some error
 		wg.Wait()
 		returnErr := ErrAborted{
-			TaskErrors: m.errorMsgs.Items,
-			Cancelled:  m.cancelled.Items,
+			TaskErrors: m.errorMsgs.items,
+			Cancelled:  m.cancelled.items,
 		}
 
 		// do the rollback
-		returnErr.UndoErrors = m.undoStack.UndoAll(&m.errorMsgs, &m.cancelled).Items
+		returnErr.UndoErrors = m.undoStack.undoAll(&m.errorMsgs, &m.cancelled).items
 		// fmt.Println(returnErr.Error())
 		return nil, returnErr
 	}
 }
 
-func (m *TCController) Reset() {
+func (m *TCController) reset() {
 	m.cancelCtx, m.cancelFunc = context.WithCancel(context.Background())
-	m.cancelled.Reset()
-	m.errorMsgs.Reset()
-	m.undoStack.Reset()
+	m.cancelled.reset()
+	m.errorMsgs.reset()
+	m.undoStack.reset()
 	for _, e := range m.executors {
-		e.messageBuffer = make(chan Message, cap(e.messageBuffer))
+		e.messageBuffer = make(chan message, cap(e.messageBuffer))
 		for dep := range e.dependency {
 			e.dependency[dep] = false
 		}
@@ -164,6 +177,7 @@ func (m *TCController) Reset() {
 	}
 }
 
+// The inner state of the controller
 func (m *TCController) String() string {
 	var sb strings.Builder
 	sb.WriteString("\ncanncelled list:\n")
@@ -178,7 +192,7 @@ func (m *TCController) String() string {
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
 		e := m.executors[id]
-		sb.WriteString(e.Name)
+		sb.WriteString(e.name)
 		sb.WriteString(fmt.Sprintf("[msgBuffer cap=%d]: (", cap(e.messageBuffer)))
 
 		depids := make([]uint32, 0, len(e.dependency))
@@ -187,7 +201,7 @@ func (m *TCController) String() string {
 		}
 		sort.Slice(depids, func(i, j int) bool { return depids[i] < depids[j] })
 		for _, depid := range depids {
-			sb.WriteString(m.executors[depid].Name)
+			sb.WriteString(m.executors[depid].name)
 			sb.WriteString(", ")
 		}
 		sb.WriteString(")\n")
@@ -198,7 +212,7 @@ func (m *TCController) String() string {
 		termids = append(termids, termid)
 	}
 	for _, termid := range termids {
-		sb.WriteString(m.executors[termid].Name)
+		sb.WriteString(m.executors[termid].name)
 		sb.WriteString(", ")
 	}
 	sb.WriteString(")\n")

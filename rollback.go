@@ -2,59 +2,60 @@ package gotcc
 
 import "sync"
 
-type UndoStack struct {
-	Lock  sync.Mutex
-	Items []*UndoFunc
+type undoStack struct {
+	lock  sync.Mutex
+	items []*undoFunc
 }
 
-type UndoFunc struct {
-	Name string
+type undoFunc struct {
+	name string
 
-	SkipError bool
+	skipError bool
 
-	Args map[string]interface{}
-	Func func(map[string]interface{}) error
+	args map[string]interface{}
+	f    func(map[string]interface{}) error
 }
 
-func EmptyUndoFunc(args map[string]interface{}) error {
-	return nil
-}
-
-func NewUndoFunc(name string, skipError bool, undo func(args map[string]interface{}) error, args map[string]interface{}) *UndoFunc {
-	return &UndoFunc{
-		Name:      name,
-		SkipError: skipError,
-		Args:      args,
-		Func:      undo,
+func newUndoFunc(name string, skipError bool, undo func(args map[string]interface{}) error, args map[string]interface{}) *undoFunc {
+	return &undoFunc{
+		name:      name,
+		skipError: skipError,
+		args:      args,
+		f:         undo,
 	}
 }
 
-func (u *UndoStack) Push(uf *UndoFunc) {
-	u.Lock.Lock()
-	u.Items = append(u.Items, uf)
-	u.Lock.Unlock()
+func (u *undoStack) push(uf *undoFunc) {
+	u.lock.Lock()
+	u.items = append(u.items, uf)
+	u.lock.Unlock()
 }
 
-func (u *UndoStack) Reset() {
-	u.Lock.Lock()
-	u.Items = []*UndoFunc{}
-	u.Lock.Unlock()
+func (u *undoStack) reset() {
+	u.lock.Lock()
+	u.items = []*undoFunc{}
+	u.lock.Unlock()
 }
 
-func (u *UndoStack) UndoAll(taskErrors *ErrorList, cancelled *CancelList) *ErrorList {
-	undoErrors := &ErrorList{}
-	for i := len(u.Items) - 1; i >= 0; i-- {
-		u.Items[i].Args["TASKERR"] = taskErrors.Items
-		u.Items[i].Args["UNDOERR"] = undoErrors.Items
-		u.Items[i].Args["CANCELLED"] = cancelled.Items
+func (u *undoStack) undoAll(taskErrors *errorLisk, cancelled *cancelList) *errorLisk {
+	undoErrors := &errorLisk{}
+	for i := len(u.items) - 1; i >= 0; i-- {
+		u.items[i].args["TASKERR"] = taskErrors.items
+		u.items[i].args["UNDOERR"] = undoErrors.items
+		u.items[i].args["CANCELLED"] = cancelled.items
 
-		err := u.Items[i].Func(u.Items[i].Args)
+		err := u.items[i].f(u.items[i].args)
 		if err != nil {
-			undoErrors.Append(NewErrorMessage(u.Items[i].Name, err))
-			if !u.Items[i].SkipError {
+			undoErrors.append(newErrorMessage(u.items[i].name, err))
+			if !u.items[i].skipError {
 				return undoErrors
 			}
 		}
 	}
 	return undoErrors
+}
+
+// Default undo function
+var EmptyUndoFunc = func(args map[string]interface{}) error {
+	return nil
 }

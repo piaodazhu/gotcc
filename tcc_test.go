@@ -357,7 +357,7 @@ func TestRunOneByOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum, ok := res[last.Name]; !ok {
+	if sum, ok := res[last.Name()]; !ok {
 		t.Fatal(err)
 	} else if sum != 1000 {
 		t.Fatal("Sum Error", sum)
@@ -376,7 +376,7 @@ func TestRunAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum, ok := res[end.Name]; !ok {
+	if sum, ok := res[end.Name()]; !ok {
 		t.Fatal(err)
 	} else if sum != 1000 {
 		t.Fatal("Sum Error", sum)
