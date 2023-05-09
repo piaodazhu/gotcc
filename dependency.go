@@ -4,6 +4,8 @@ import (
 	"sort"
 )
 
+// A dependency expression is a filter to describe the tasks' dependency
+// A task will be launched only if the expression is true.
 type DependencyExpression struct {
 	f      func() bool
 	allAnd bool

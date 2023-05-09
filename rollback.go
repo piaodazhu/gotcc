@@ -46,7 +46,7 @@ func (u *undoStack) undoAll(taskErrors *errorLisk, cancelled *cancelList) *error
 
 		err := u.items[i].f(u.items[i].args)
 		if err != nil {
-			undoErrors.append(NewErrorMessage(u.items[i].name, err))
+			undoErrors.append(newErrorMessage(u.items[i].name, err))
 			if !u.items[i].skipError {
 				return undoErrors
 			}

@@ -6,10 +6,14 @@ import (
 	"github.com/panjf2000/ants/v2"
 )
 
+// Goroutine pool interface. It should be blocked until worker available.
 type GoroutinePool interface {
 	Go(task func()) error
 }
 
+// Run the execution with a Coroutine Pool. If success, return a map[name]value, where names are task
+// of termination dependent tasks and values are their return value.
+// If failed, return ErrNoTermination, ErrLoopDependency or ErrAborted
 func (m *TCController) PoolRun(pool GoroutinePool) (map[string]interface{}, error) {
 	if len(m.termination.dependency) == 0 {
 		return nil, ErrNoTermination{}
@@ -40,7 +44,7 @@ lauchLoop:
 				case <-m.cancelCtx.Done():
 					return
 				case msg := <-e.messageBuffer:
-					e.MarkDependency(msg.senderId, true)
+					e.markDependency(msg.senderId, true)
 					args[msg.senderName] = msg.value
 				}
 			}
@@ -50,11 +54,11 @@ lauchLoop:
 			if err != nil {
 				switch err := err.(type) {
 				// case ErrSilentFail:
-				// 	m.errorMsgs.Append(NewErrorMessage(e.Name, err))
+				// 	m.errorMsgs.Append(newErrorMessage(e.Name, err))
 				case ErrCancelled:
-					m.cancelled.append(NewStateMessage(e.name, err.State))
+					m.cancelled.append(newStateMessage(e.name, err.State))
 				default:
-					m.errorMsgs.append(NewErrorMessage(e.name, err))
+					m.errorMsgs.append(newErrorMessage(e.name, err))
 					m.cancelFunc()
 				}
 				return
@@ -92,7 +96,7 @@ waitLoop:
 			Aborted = true
 			break waitLoop
 		case msg := <-t.messageBuffer:
-			t.MarkDependency(msg.senderId, true)
+			t.markDependency(msg.senderId, true)
 			Results[msg.senderName] = msg.value
 		}
 	}
@@ -129,6 +133,7 @@ type DefaultPool struct {
 	pool *ants.Pool
 }
 
+// Create a default coroutine pool with `size`.
 func NewDefaultPool(size int) DefaultPool {
 	if size <= 0 {
 		pool, _ := ants.NewPool(size)

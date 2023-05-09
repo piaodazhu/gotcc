@@ -16,7 +16,7 @@ type ErrorMessage struct {
 	Error    error
 }
 
-func NewErrorMessage(taskName string, err error) *ErrorMessage {
+func newErrorMessage(taskName string, err error) *ErrorMessage {
 	return &ErrorMessage{
 		TaskName: taskName,
 		Error:    err,
@@ -62,7 +62,7 @@ type State interface {
 	String() string
 }
 
-func NewStateMessage(taskName string, state State) *StateMessage {
+func newStateMessage(taskName string, state State) *StateMessage {
 	return &StateMessage{
 		TaskName: taskName,
 		State:    state,

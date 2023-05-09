@@ -37,6 +37,8 @@ func newExecutor(name string, f func(args map[string]interface{}) (interface{}, 
 	}
 }
 
+// Create a dependency expression for the executor.
+// It means the task launching may depend on executor `d`.
 func (e *Executor) NewDependencyExpr(d *Executor) DependencyExpression {
 	if _, exists := e.dependency[d.id]; !exists {
 		e.dependency[d.id] = false
@@ -46,29 +48,33 @@ func (e *Executor) NewDependencyExpr(d *Executor) DependencyExpression {
 	return newDependencyExpr(e.dependency, d.id)
 }
 
+// Get dependency expression of the executor.
 func (e *Executor) DependencyExpr() DependencyExpression {
 	return e.dependencyExpr
 }
 
+// Set dependency expression for the executor. `Expr` is a dependency expression.
 func (e *Executor) SetDependency(Expr DependencyExpression) *Executor {
 	e.dependencyExpr = Expr
 	return e
 }
 
-func (e *Executor) CalcDependency() bool {
+func (e *Executor) calcDependency() bool {
 	return e.dependencyExpr.f()
 }
 
-func (e *Executor) MarkDependency(id uint32, finished bool) {
+func (e *Executor) markDependency(id uint32, finished bool) {
 	e.dependency[id] = finished
 }
 
+// Set undo function the task executor. The undo function will get all arguments of the task function.
 func (e *Executor) SetUndoFunc(undo func(args map[string]interface{}) error, skipError bool) *Executor {
 	e.undo = undo
 	e.undoSkipError = skipError
 	return e
 }
 
+// Get task name of the executor.
 func (e *Executor) Name() string {
 	return e.name
 }
