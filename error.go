@@ -68,4 +68,3 @@ func (e ErrAborted) Error() string {
 	sb.WriteString((&cancelList{items: e.Cancelled}).String())
 	return sb.String()
 }
-
