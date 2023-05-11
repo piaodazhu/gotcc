@@ -4,7 +4,7 @@
 
 # gotcc
 
-🤖 `gotcc` is a Golang package for Task Concurrency Control. It allows you to define tasks, their dependencies, and the controller will run the tasks concurrently while respecting the dependencies.
+🤖 `gotcc` is a Golang package for Task Concurrency Control. It allows you to define tasks and their dependencies, then the controller will run the tasks concurrently while respecting the dependencies.
 
 Features of `gotcc`
 - Automatic task concurrency control based on dependency declarations.
@@ -12,7 +12,7 @@ Features of `gotcc`
 - Many-to-many result delivery between tasks.
 - Support tasks rollback in case of any error.
 - Support multiple errors collection.
-- Support coroutine pool: default(panjf2000/ants) or user-defined coroutine pool.
+- Support coroutine pool: default([panjf2000/ants](https://github.com/panjf2000/ants)) or user-defined coroutine pool.
 
 ## Installation
 
@@ -47,26 +47,33 @@ func main() {
 	controller := gotcc.NewTCController()
 
 	// 2. Add tasks to the controller
-	//   TaskA: bind arguments with ExampleFunc1
+
+	// TaskA: bind arguments with ExampleFunc1
 	taskA := controller.AddTask("taskA", ExampleFunc1, "BindArg-A")
-	//   TaskB: like TaskA, but set undoFunction
+
+	// TaskB: like TaskA, but set undoFunction
 	taskB := controller.AddTask("taskB", ExampleFunc1, "BindArg-B").SetUndoFunc(ExampleUndo, true)
-	//   TaskC: bind arguments with ExampleFunc2
+
+	// TaskC: bind arguments with ExampleFunc2
 	taskC := controller.AddTask("taskC", ExampleFunc2, "BindArg-C")
 	
-	//   TaskD: bind arguments with ExampleFunc2
+	// TaskD: bind arguments with ExampleFunc2
 	taskD := controller.AddTask("taskD", ExampleFunc2, "BindArg-D")
 
 	// 3. Define dependencies
-	//   B depend on A
+
+	// B depend on A
 	taskB.SetDependency(taskB.NewDependencyExpr(taskA))
-	//   C depend on A
+
+	// C depend on A
 	taskC.SetDependency(taskC.NewDependencyExpr(taskA))
-	//   D depend on B and C
+
+	// D depend on B and C
 	taskD.SetDependency(gotcc.MakeAndExpr(taskD.NewDependencyExpr(taskB), taskD.NewDependencyExpr(taskC)))
 
 	// 4. Define termination (Important)
-	//   set TaskD's finish as termination
+
+	// set TaskD's finish as termination
 	controller.SetTermination(controller.NewTerminationExpr(taskD))
 	
 	// 5. Run the tasks

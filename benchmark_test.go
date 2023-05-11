@@ -1,6 +1,7 @@
 package gotcc
 
 import (
+	"context"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -8,12 +9,17 @@ import (
 	"time"
 )
 
+const (
+	ITERNUM = 0
+	SLEEPTIME = 0
+)
+
 func TaskForBench(args map[string]interface{}) (interface{}, error) {
-	// time.Sleep(time.Microsecond)
-	// i := 0
-	// for i < 100000 {
-	// 	i++
-	// }
+	time.Sleep(time.Microsecond*SLEEPTIME)
+	i := 0
+	for i < ITERNUM {
+		i++
+	}
 	return nil, nil
 }
 
@@ -545,9 +551,9 @@ func (t *TaskTree) GoN(nodes []*Node, rollback func(error)) func() <-chan error 
 }
 
 func TaskForComparison() error {
-	time.Sleep(time.Microsecond)
+	time.Sleep(time.Microsecond*SLEEPTIME)
 	i := 0
-	for i < 100000 {
+	for i < ITERNUM {
 		i++
 	}
 	return nil
@@ -715,6 +721,331 @@ func BenchmarkTaskTreeBinaryTree1000(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		chWait := t.Go(root, nil)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTreeBinaryTree10000(b *testing.B) {
+	t := &TaskTree{}
+	root := &Node{F: TaskForComparison}
+	queue := []*Node{root}
+	for i := 0; i < 12; i++ {
+		tmp := []*Node{}
+		for _, node := range queue {
+			left := &Node{F: TaskForComparison}
+			right := &Node{F: TaskForComparison}
+			node.Nodes = append(node.Nodes, left)
+			node.Nodes = append(node.Nodes, right)
+			tmp = append(tmp, left)
+			tmp = append(tmp, right)
+		}
+		queue = tmp
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go(root, nil)
+		<-chWait()
+	}
+}
+
+// ---------------------------------------
+// After updating the code of lesismal
+// ---------------------------------------
+type Node2 struct {
+	F     func(context.Context) error
+	Nodes []*Node2
+
+	selfCnt    int32
+	parentCnt  *int32
+	parentDone chan struct{}
+	parentFunc func(context.Context) error
+	failFunc   func(error)
+}
+
+func (node *Node2) doNodes2(ctx context.Context, parentCnt *int32, parentDone chan struct{}, parentFunc func(context.Context) error, failFunc func(error)) {
+	node.selfCnt = int32(len(node.Nodes))
+	node.parentDone = parentDone
+	node.parentCnt = parentCnt
+	node.parentFunc = parentFunc
+	node.failFunc = failFunc
+	if node.selfCnt > 0 {
+		for _, v := range node.Nodes {
+			v.doNodes2(ctx, &node.selfCnt, nil, node.doSelf2, failFunc)
+		}
+		return
+	}
+	go node.doSelf2(ctx)
+}
+
+func (node *Node2) doSelf2(ctx context.Context) error {
+	var err error
+	defer func() {
+		if node.parentDone != nil {
+			select {
+			case node.parentDone <- struct{}{}:
+			default:
+			}
+		} else if err == nil && atomic.AddInt32(node.parentCnt, -1) == 0 && node.parentFunc != nil {
+			if err := node.parentFunc(ctx); err != nil && node.failFunc != nil {
+				node.failFunc(err)
+			}
+		}
+	}()
+	err = node.F(ctx)
+	if err != nil && node.failFunc != nil {
+		node.failFunc(err)
+	}
+	return nil
+}
+
+type TaskTree2 struct{}
+
+func (t *TaskTree2) Go2(ctx context.Context, root *Node2) func() <-chan error {
+	chErr := make(chan error, 1)
+	chDone := make(chan struct{}, 1)
+	waitFunc := func() <-chan error {
+		var err error
+		select {
+		case <-chDone:
+		case err = <-chErr:
+		}
+		select {
+		case chErr <- err:
+		default:
+		}
+		return chErr
+	}
+	var n int32
+	var failFuncCalled int32
+	root.doNodes2(ctx, &n, chDone, nil, func(err error) {
+		if atomic.AddInt32(&failFuncCalled, 1) == 1 {
+			chErr <- err
+		}
+	})
+	return waitFunc
+}
+
+func TaskForComparison2(ctx context.Context) error {
+	time.Sleep(time.Microsecond*SLEEPTIME)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	i := 0
+	for i < ITERNUM {
+		i++
+	}
+	return nil
+}
+
+func BenchmarkTaskTree2Serialized10(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	last := root
+	for i := 0; i < 9; i++ {
+		node := &Node2{F: TaskForComparison2}
+		last.Nodes = append(last.Nodes, node)
+		last = node
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+func BenchmarkTaskTree2Serialized100(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	last := root
+	for i := 0; i < 99; i++ {
+		node := &Node2{F: TaskForComparison2}
+		last.Nodes = append(last.Nodes, node)
+		last = node
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+func BenchmarkTaskTree2Serialized1000(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	last := root
+	for i := 0; i < 999; i++ {
+		node := &Node2{F: TaskForComparison2}
+		last.Nodes = append(last.Nodes, node)
+		last = node
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2ManyToOne10(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	for i := 0; i < 9; i++ {
+		node := &Node2{F: TaskForComparison2}
+		root.Nodes = append(root.Nodes, node)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2ManyToOne100(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	for i := 0; i < 99; i++ {
+		node := &Node2{F: TaskForComparison2}
+		root.Nodes = append(root.Nodes, node)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2ManyToOne1000(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	for i := 0; i < 999; i++ {
+		node := &Node2{F: TaskForComparison2}
+		root.Nodes = append(root.Nodes, node)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2BinaryTree10(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	queue := []*Node2{root}
+	for i := 0; i < 3; i++ {
+		tmp := []*Node2{}
+		for _, node := range queue {
+			left := &Node2{F: TaskForComparison2}
+			right := &Node2{F: TaskForComparison2}
+			node.Nodes = append(node.Nodes, left)
+			node.Nodes = append(node.Nodes, right)
+			tmp = append(tmp, left)
+			tmp = append(tmp, right)
+		}
+		queue = tmp
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2BinaryTree100(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	queue := []*Node2{root}
+	for i := 0; i < 6; i++ {
+		tmp := []*Node2{}
+		for _, node := range queue {
+			left := &Node2{F: TaskForComparison2}
+			right := &Node2{F: TaskForComparison2}
+			node.Nodes = append(node.Nodes, left)
+			node.Nodes = append(node.Nodes, right)
+			tmp = append(tmp, left)
+			tmp = append(tmp, right)
+		}
+		queue = tmp
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2BinaryTree1000(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	queue := []*Node2{root}
+	for i := 0; i < 9; i++ {
+		tmp := []*Node2{}
+		for _, node := range queue {
+			left := &Node2{F: TaskForComparison2}
+			right := &Node2{F: TaskForComparison2}
+			node.Nodes = append(node.Nodes, left)
+			node.Nodes = append(node.Nodes, right)
+			tmp = append(tmp, left)
+			tmp = append(tmp, right)
+		}
+		queue = tmp
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
+		<-chWait()
+	}
+}
+
+func BenchmarkTaskTree2BinaryTree10000(b *testing.B) {
+	t := &TaskTree2{}
+	root := &Node2{F: TaskForComparison2}
+	queue := []*Node2{root}
+	for i := 0; i < 12; i++ {
+		tmp := []*Node2{}
+		for _, node := range queue {
+			left := &Node2{F: TaskForComparison2}
+			right := &Node2{F: TaskForComparison2}
+			node.Nodes = append(node.Nodes, left)
+			node.Nodes = append(node.Nodes, right)
+			tmp = append(tmp, left)
+			tmp = append(tmp, right)
+		}
+		queue = tmp
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chWait := t.Go2(ctx, root)
 		<-chWait()
 	}
 }
